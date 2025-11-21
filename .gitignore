@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Hardhat builds
+artifacts/
+cache/
+coverage/
+coverage.json
+typechain/
+
+# App builds
+dist/
+
+# Local data
+server/airdrop.db
+*.db
+*.sqlite
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs and OS files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+.DS_Store
