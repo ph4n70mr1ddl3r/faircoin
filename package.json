@@ -1,0 +1,34 @@
+{
+  "name": "faircoin",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat test",
+    "build:merkle": "node scripts/buildMerkle.js",
+    "serve": "npx http-server public -p 4173",
+    "dev": "node server/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "ethers": "^6.15.0",
+    "express": "^5.1.0",
+    "merkletreejs": "^0.6.0",
+    "sha3": "^2.1.4"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "hardhat": "^2.27.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "ethers": "^6.15.0",
+    "express": "^4.19.2",
+    "merkletreejs": "^0.6.0",
+    "sha3": "^2.1.4"
+  }
+}

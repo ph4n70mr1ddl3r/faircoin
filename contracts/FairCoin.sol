@@ -1,0 +1,206 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/// @notice ERC20 token that embeds an ownerless constant-product market maker.
+/// Merkle claims mint 100 FAIR; 95 FAIR go to the claimer and 5 FAIR seed the pool.
+/// Selling FAIR for ETH has a 0.1% fee that routes to the founder; buying FAIR with ETH is fee-free.
+contract FairCoin {
+    /*//////////////////////////////////////////////////////////////
+                                ERC20
+    //////////////////////////////////////////////////////////////*/
+
+    string public constant name = "Fair Coin";
+    string public constant symbol = "FAIR";
+    uint8 public constant decimals = 18;
+
+    uint256 public totalSupply;
+    mapping(address => uint256) internal _balances;
+    mapping(address => mapping(address => uint256)) internal _allowances;
+
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
+
+    /*//////////////////////////////////////////////////////////////
+                           AIRDROP + ADMIN
+    //////////////////////////////////////////////////////////////*/
+
+    address public immutable founder;
+    bytes32 public immutable merkleRoot;
+    uint256 public immutable claimAmount = 100 * 1e18; // 100 FAIR with 18 decimals
+
+    mapping(address => bool) public claimed;
+
+    event Claimed(address indexed account, uint256 userAmount, uint256 poolAmount);
+
+    /*//////////////////////////////////////////////////////////////
+                               AMM STATE
+    //////////////////////////////////////////////////////////////*/
+
+    uint256 public reserveFair;
+    uint256 public reserveEth;
+
+    event Sync(uint256 reserveFair, uint256 reserveEth);
+    event Donation(address indexed from, uint256 fairAmount, uint256 ethAmount);
+    event Buy(address indexed buyer, uint256 ethIn, uint256 fairOut);
+    event Sell(address indexed seller, uint256 fairIn, uint256 fee, uint256 ethOut);
+
+    bool private _locked;
+
+    modifier nonReentrant() {
+        require(!_locked, "REENTRANCY");
+        _locked = true;
+        _;
+        _locked = false;
+    }
+
+    constructor(bytes32 _merkleRoot, address _founder) {
+        require(_founder != address(0), "FOUNDER_REQUIRED");
+        founder = _founder;
+        merkleRoot = _merkleRoot;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             ERC20 LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function balanceOf(address account) public view returns (uint256) {
+        return _balances[account];
+    }
+
+    function allowance(address owner, address spender) public view returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        _allowances[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        _transfer(msg.sender, to, amount);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        uint256 allowed = _allowances[from][msg.sender];
+        require(allowed >= amount, "ALLOWANCE");
+        _allowances[from][msg.sender] = allowed - amount;
+        _transfer(from, to, amount);
+        return true;
+    }
+
+    function _transfer(address from, address to, uint256 amount) internal {
+        require(to != address(0), "ZERO_TO");
+        uint256 bal = _balances[from];
+        require(bal >= amount, "BALANCE");
+        unchecked {
+            _balances[from] = bal - amount;
+        }
+        _balances[to] += amount;
+        emit Transfer(from, to, amount);
+    }
+
+    function _mint(address to, uint256 amount) internal {
+        totalSupply += amount;
+        _balances[to] += amount;
+        emit Transfer(address(0), to, amount);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           MERKLE CLAIMING
+    //////////////////////////////////////////////////////////////*/
+
+    function claim(bytes32[] calldata proof) external nonReentrant {
+        require(!claimed[msg.sender], "ALREADY_CLAIMED");
+        require(_verify(proof, msg.sender), "INVALID_PROOF");
+
+        claimed[msg.sender] = true;
+
+        uint256 poolCut = claimAmount / 20; // 5 FAIR of the 100 FAIR
+        uint256 userCut = claimAmount - poolCut;
+
+        _mint(msg.sender, userCut);
+        _mint(address(this), poolCut);
+
+        _sync();
+        emit Claimed(msg.sender, userCut, poolCut);
+    }
+
+    function _verify(bytes32[] calldata proof, address account) internal view returns (bool) {
+        bytes32 leaf = keccak256(abi.encodePacked(account));
+        bytes32 computed = leaf;
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 sibling = proof[i];
+            if (computed < sibling) {
+                computed = keccak256(abi.encodePacked(computed, sibling));
+            } else {
+                computed = keccak256(abi.encodePacked(sibling, computed));
+            }
+        }
+        return computed == merkleRoot;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              AMM LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function donate(uint256 fairAmount) external payable nonReentrant {
+        if (fairAmount > 0) {
+            _transfer(msg.sender, address(this), fairAmount);
+        }
+        _sync();
+        emit Donation(msg.sender, fairAmount, msg.value);
+    }
+
+    function buyFair() external payable nonReentrant {
+        require(msg.value > 0, "ZERO_IN");
+        uint256 fairOut = _getAmountOut(msg.value, reserveEth, reserveFair);
+        require(fairOut > 0, "NO_LIQUIDITY");
+
+        _transfer(address(this), msg.sender, fairOut);
+        _sync();
+        emit Buy(msg.sender, msg.value, fairOut);
+    }
+
+    function sellFair(uint256 fairAmount) external nonReentrant {
+        require(fairAmount > 0, "ZERO_IN");
+
+        _transfer(msg.sender, address(this), fairAmount);
+
+        uint256 fee = fairAmount / 1000; // 0.1%
+        uint256 amountInAfterFee = fairAmount - fee;
+        if (fee > 0) {
+            _balances[address(this)] -= fee;
+            _balances[founder] += fee;
+            emit Transfer(address(this), founder, fee);
+        }
+
+        uint256 ethOut = _getAmountOut(amountInAfterFee, reserveFair, reserveEth);
+        require(ethOut > 0, "NO_LIQUIDITY");
+        require(ethOut <= address(this).balance, "INSUFFICIENT_ETH");
+
+        (bool ok, ) = msg.sender.call{value: ethOut}("");
+        require(ok, "ETH_SEND_FAIL");
+
+        _sync();
+        emit Sell(msg.sender, fairAmount, fee, ethOut);
+    }
+
+    function _getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) internal pure returns (uint256) {
+        if (amountIn == 0 || reserveIn == 0 || reserveOut == 0) return 0;
+        // constant product: amountOut = reserveOut - (k / (reserveIn + amountIn))
+        uint256 k = reserveIn * reserveOut;
+        return reserveOut - (k / (reserveIn + amountIn));
+    }
+
+    function _sync() internal {
+        reserveFair = _balances[address(this)];
+        reserveEth = address(this).balance;
+        emit Sync(reserveFair, reserveEth);
+    }
+
+    receive() external payable {
+        _sync();
+    }
+}

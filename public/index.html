@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fair Coin | Merkle Airdrop + AMM</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-dot"></div>
+        <div>
+          <div class="brand-title">Fair Coin</div>
+          <div class="muted small">Merkle airdrop • Claim-only preview</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span class="badge">Merkle proof</span>
+        <span class="badge">Wallet signature</span>
+        <span class="badge">100 FAIR mint</span>
+      </div>
+    </header>
+
+    <main class="layout simple">
+      <section class="panel highlight">
+        <div>
+          <p class="pill">Receive 95 FAIR · 5 FAIR auto-seeds pool</p>
+          <h1>Claim your Fair Coin</h1>
+          <p class="muted">
+            Prove allowlist membership with a Merkle proof, then sign to prove ownership of the address. The contract mints 100 FAIR per claim (95 to you, 5 to the ownerless pool).
+          </p>
+          <div class="statline">
+            <div>
+              <div class="muted">Mint per claim</div>
+              <div class="stat" id="stat-claim">100 FAIR</div>
+            </div>
+            <div>
+              <div class="muted">Merkle root</div>
+              <div id="stat-root" class="stat monospace"></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel sub">
+          <h3>Wallet</h3>
+          <p class="muted">Use the same address that appears in the allowlist.</p>
+          <div class="flex wrap gap">
+            <button id="btn-connect">Connect wallet</button>
+            <span id="wallet-status" class="pill muted">Not connected</span>
+          </div>
+          <div class="statline">
+            <div>
+              <div class="muted">Address</div>
+              <div id="wallet-address" class="stat muted monospace">—</div>
+            </div>
+            <div>
+              <div class="muted">Chain</div>
+              <div id="wallet-chain" class="stat muted monospace">—</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h3>Claim flow</h3>
+            <p class="muted">1) Load proof 2) Verify 3) Sign ownership message.</p>
+          </div>
+          <span class="badge">Dev helper</span>
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="account">Pick a test account</label>
+            <select id="account"></select>
+          </div>
+          <div>
+            <label for="privateKey">Private key (dev only)</label>
+            <input id="privateKey" placeholder="0x..." />
+          </div>
+        </div>
+        <label for="address">Address</label>
+        <input id="address" placeholder="0x..." />
+        <div class="flex wrap gap">
+          <button id="btn-proof">Load proof</button>
+          <button id="btn-verify" class="secondary">Verify against root</button>
+        </div>
+        <label for="proof">Merkle proof</label>
+        <textarea id="proof" class="log" readonly></textarea>
+        <div id="status" class="muted"></div>
+        <div class="divider"></div>
+        <h4>Ownership signature</h4>
+        <p class="muted">Connect your wallet, then sign the message binding your address to the Merkle root.</p>
+        <button id="btn-sign" class="secondary">Sign ownership message</button>
+        <textarea id="signature" class="log" readonly placeholder="Signature will appear here"></textarea>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h3>Allowlist — dev preview</h3>
+            <p class="muted">Dummy private keys are included only for local testing. Drop them in production.</p>
+          </div>
+          <span class="badge">Sample entries</span>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="sample-table">
+            <thead>
+              <tr>
+                <th>Address</th>
+                <th>Private key</th>
+                <th>Proof</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="./vendor/ethers.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
