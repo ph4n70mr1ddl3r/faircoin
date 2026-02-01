@@ -266,7 +266,11 @@
       $("wallet-status").className = "danger";
       return;
     }
+    
     try {
+      $("wallet-status").textContent = "Connecting...";
+      $("wallet-status").className = "pill";
+      
       state.provider = new ethers.BrowserProvider(injected);
       await state.provider.send("eth_requestAccounts", []);
       state.signer = await state.provider.getSigner();
@@ -342,12 +346,15 @@
       `Merkle root: ${state.merkleRoot}`,
     ].join("\n");
     try {
+      $("status").textContent = "Please confirm signature in MetaMask...";
+      $("status").className = "pill";
       const signature = await state.signer.signMessage(message);
       $("signature").value = signature;
       $("status").textContent = "Ownership message signed with MetaMask.";
       $("status").className = "success";
     } catch (err) {
-      $("status").textContent = "Signing was rejected.";
+      console.error("Signing error:", err);
+      $("status").textContent = err.code === 4001 ? "Signature was rejected in wallet." : "Signing failed.";
       $("status").className = "danger";
     }
   }
@@ -369,10 +376,13 @@
       return;
     }
     try {
+      $("status").textContent = "Checking eligibility...";
+      $("status").className = "pill";
       const data = await fetchEligibility(address);
       applyEligibility(data);
     } catch (err) {
-      $("status").textContent = "Eligibility lookup failed.";
+      console.error("Eligibility error:", err);
+      $("status").textContent = err.message === "Request timeout after 10000ms" ? "Request timed out. Please try again." : "Eligibility lookup failed.";
       $("status").className = "danger";
     }
   });

@@ -28,6 +28,7 @@ function validateConfig() {
 }
 
 function isValidMerkleRoot(root) {
+  if (!root || typeof root !== 'string') return false;
   return /^0x[a-f0-9]{64}$/i.test(root);
 }
 
@@ -69,7 +70,7 @@ function validateClaimsData(claims) {
     }
     for (let j = 0; j < claim.proof.length; j++) {
       const proofItem = claim.proof[j];
-      if (!proofItem || typeof proofItem !== 'string' || proofItem.length !== 66) {
+      if (!proofItem || typeof proofItem !== 'string' || proofItem.length !== 66 || !isValidMerkleRoot(proofItem)) {
         throw new Error(`Invalid proof format at index ${i}, proof position ${j}`);
       }
     }
@@ -156,7 +157,12 @@ function createServer() {
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
-    message: { error: "Too many requests from this IP, please try again later." }
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+      logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
+      res.status(429).json({ error: "Too many requests from this IP, please try again later." });
+    }
   });
 
   app.use("/api", apiLimiter);
@@ -183,14 +189,17 @@ function createServer() {
       const address = String(req.query.address || "").trim();
       
       if (!address) {
+        logger.warn("Eligibility check attempted with empty address");
         return res.status(400).json({ error: "Address parameter is required" });
       }
       
       if (!validateAddress(address)) {
+        logger.warn(`Invalid address format: ${address}`);
         return res.status(400).json({ error: "Invalid Ethereum address format" });
       }
       
       const normalizedAddress = address.toLowerCase();
+      logger.info(`Eligibility check for address: ${normalizedAddress}`);
 
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
       if (!rootRow) {
