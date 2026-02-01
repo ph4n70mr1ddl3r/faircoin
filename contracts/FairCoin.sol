@@ -148,6 +148,8 @@ contract FairCoin {
     //////////////////////////////////////////////////////////////*/
 
     function donate(uint256 fairAmount) external payable nonReentrant {
+        require(fairAmount > 0 || msg.value > 0, "DONATE_ZERO");
+        
         if (fairAmount > 0) {
             _transfer(msg.sender, address(this), fairAmount);
         }

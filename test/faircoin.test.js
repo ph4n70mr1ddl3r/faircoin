@@ -146,4 +146,73 @@ describe("FairCoin", function () {
     expect(await fair.reserveFair()).to.equal(reserveFairBefore + amountAfterFee);
     expect(await fair.reserveEth()).to.equal(reserveEthBefore - expectedEthOut);
   });
+
+  it("rejects donate with zero FAIR and zero ETH", async function () {
+    const { fair } = await deployFixture();
+    await expect(fair.donate(0, { value: 0 })).to.be.revertedWith("DONATE_ZERO");
+  });
+
+  it("allows donate with only ETH", async function () {
+    const { fair, signers } = await deployFixture();
+    const donor = signers[0];
+    const donateEth = 1n * WAD;
+    await expect(fair.connect(donor).donate(0, { value: donateEth }))
+      .to.emit(fair, "Donation")
+      .withArgs(donor.address, 0, donateEth);
+    expect(await fair.reserveEth()).to.equal(donateEth);
+  });
+
+  it("allows donate with only FAIR", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const donor = signers[0];
+    await fair.connect(donor).claim(proofs[donor.address.toLowerCase()]);
+    const donateFair = 10n * WAD;
+    await expect(fair.connect(donor).donate(donateFair, { value: 0 }))
+      .to.emit(fair, "Donation")
+      .withArgs(donor.address, donateFair, 0);
+    expect(await fair.reserveFair()).to.equal(donateFair);
+  });
+
+  it("rejects buy with zero ETH", async function () {
+    const { fair, signers } = await deployFixture();
+    await expect(fair.connect(signers[0]).buyFair({ value: 0 })).to.be.revertedWith("ZERO_IN");
+  });
+
+  it("rejects buy with no liquidity", async function () {
+    const { fair, signers } = await deployFixture();
+    const ethIn = 1n * WAD;
+    await expect(fair.connect(signers[0]).buyFair({ value: ethIn })).to.be.revertedWith("NO_LIQUIDITY");
+  });
+
+  it("rejects sell with zero amount", async function () {
+    const { fair, signers } = await deployFixture();
+    await expect(fair.connect(signers[0]).sellFair(0)).to.be.revertedWith("ZERO_IN");
+  });
+
+  it("rejects sell without sufficient balance", async function () {
+    const { fair, signers } = await deployFixture();
+    const seller = signers[0];
+    const sellAmount = 100n * WAD;
+    await expect(fair.connect(seller).sellFair(sellAmount)).to.be.revertedWith("BALANCE");
+  });
+
+  it("prevents reentrancy on claim", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const user = signers[0];
+    const proof = proofs[user.address.toLowerCase()];
+    
+    await fair.connect(user).claim(proof);
+    await expect(fair.connect(user).claim(proof)).to.be.revertedWith("ALREADY_CLAIMED");
+  });
+
+  it("syncs reserves correctly after receive ETH", async function () {
+    const { fair, signers } = await deployFixture();
+    const donor = signers[0];
+    const ethAmount = 1n * WAD;
+    
+    await expect(donor.sendTransaction({ to: await fair.getAddress(), value: ethAmount }))
+      .to.emit(fair, "Sync");
+    
+    expect(await fair.reserveEth()).to.equal(ethAmount);
+  });
 });

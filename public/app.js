@@ -21,6 +21,9 @@
       if (!data.merkleRoot) {
         throw new Error("Invalid airdrop.json: missing merkleRoot");
       }
+      if (!Array.isArray(data.claims)) {
+        throw new Error("Invalid airdrop.json: claims must be an array");
+      }
       state.claims = data.claims || [];
       state.merkleRoot = (data.merkleRoot || "").toLowerCase();
       state.claimAmount = data.claimAmount || "100";
@@ -165,9 +168,17 @@
   }
 
   async function fetchEligibility(address) {
-    const res = await fetch(`/api/eligibility?address=${encodeURIComponent(address)}`);
-    if (!res.ok) throw new Error("eligibility fetch failed");
-    return res.json();
+    try {
+      const res = await fetch(`/api/eligibility?address=${encodeURIComponent(address)}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || "eligibility fetch failed");
+      }
+      return res.json();
+    } catch (err) {
+      console.error("Eligibility API error:", err.message);
+      throw err;
+    }
   }
 
   function applyEligibility(data) {
@@ -212,6 +223,7 @@
         const eligibility = await fetchEligibility(state.walletAddress);
         applyEligibility(eligibility);
       } catch (err) {
+        console.error("Eligibility lookup failed:", err.message);
         $("status").textContent = "Eligibility lookup failed.";
         $("status").className = "danger";
       }

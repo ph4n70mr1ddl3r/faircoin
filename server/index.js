@@ -2,10 +2,23 @@ const path = require("path");
 const express = require("express");
 const Database = require("better-sqlite3");
 const fs = require("fs");
+const helmet = require("helmet");
+const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 
 const PORT = process.env.PORT || 4173;
 const DB_PATH = path.join(__dirname, "airdrop.db");
 const AIRDROP_JSON = path.join(__dirname, "..", "public", "airdrop.json");
+
+function validateConfig() {
+  if (typeof PORT !== 'string' && typeof PORT !== 'number') {
+    throw new Error(`Invalid PORT configuration: ${PORT}`);
+  }
+  const portNum = parseInt(PORT, 10);
+  if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+    throw new Error(`PORT must be a valid port number (1-65535): ${PORT}`);
+  }
+}
 
 function initDb() {
   const db = new Database(DB_PATH);
@@ -64,26 +77,35 @@ function initDb() {
 }
 
 function createServer() {
+  validateConfig();
   const db = initDb();
   const app = express();
+  
+  app.use(helmet());
+  app.use(cors());
   app.use(express.json());
+
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: { error: "Too many requests from this IP, please try again later." }
+  });
 
   app.use(express.static(path.join(__dirname, "..", "public")));
 
-  app.get("/api/eligibility", (req, res) => {
-    const address = String(req.query.address || "").toLowerCase();
-    if (!address || !address.startsWith("0x") || address.length !== 42) {
-      return res.status(400).json({ error: "Invalid address" });
-    }
-
-    const addressRegex = /^0x[a-f0-9]{40}$/;
-    if (!addressRegex.test(address)) {
-      return res.status(400).json({ error: "Invalid Ethereum address format" });
-    }
-
+  app.get("/api/eligibility", apiLimiter, (req, res) => {
     try {
+      const address = String(req.query.address || "").trim().toLowerCase();
+      const addressRegex = /^0x[a-f0-9]{40}$/;
+      if (!addressRegex.test(address)) {
+        return res.status(400).json({ error: "Invalid Ethereum address format" });
+      }
+
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
-      if (!rootRow) return res.status(500).json({ error: "Root not set" });
+      if (!rootRow) {
+        console.error("Merkle root not found in database");
+        return res.status(500).json({ error: "Merkle root not configured" });
+      }
 
       const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(address);
       const qualified = !!claimRow;
