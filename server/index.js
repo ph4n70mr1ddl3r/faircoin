@@ -23,19 +23,30 @@ function initDb() {
 
   const row = db.prepare("SELECT root FROM merkle_root WHERE id = 1").get();
   if (!row) {
-    const raw = JSON.parse(fs.readFileSync(AIRDROP_JSON, "utf8"));
-    const insertRoot = db.prepare("INSERT INTO merkle_root (id, root, claim_amount) VALUES (1, ?, ?)");
-    insertRoot.run(raw.merkleRoot.toLowerCase(), raw.claimAmount || "100");
+    try {
+      if (!fs.existsSync(AIRDROP_JSON)) {
+        throw new Error(`Airdrop file not found: ${AIRDROP_JSON}`);
+      }
+      const raw = JSON.parse(fs.readFileSync(AIRDROP_JSON, "utf8"));
+      if (!raw.merkleRoot) {
+        throw new Error("Invalid airdrop.json: missing merkleRoot");
+      }
+      const insertRoot = db.prepare("INSERT INTO merkle_root (id, root, claim_amount) VALUES (1, ?, ?)");
+      insertRoot.run(raw.merkleRoot.toLowerCase(), raw.claimAmount || "100");
 
-    const insertClaim = db.prepare("INSERT INTO claims (address, proof) VALUES (?, ?)");
-    const entries = raw.claims || [];
-    const tx = db.transaction(() => {
-      entries.forEach((c) => {
-        insertClaim.run(c.address.toLowerCase(), JSON.stringify(c.proof || []));
+      const insertClaim = db.prepare("INSERT INTO claims (address, proof) VALUES (?, ?)");
+      const entries = raw.claims || [];
+      const tx = db.transaction(() => {
+        entries.forEach((c) => {
+          insertClaim.run(c.address.toLowerCase(), JSON.stringify(c.proof || []));
+        });
       });
-    });
-    tx();
-    console.log(`Seeded DB with root ${raw.merkleRoot} and ${entries.length} claims.`);
+      tx();
+      console.log(`Seeded DB with root ${raw.merkleRoot} and ${entries.length} claims.`);
+    } catch (err) {
+      console.error("Failed to seed database:", err.message);
+      throw err;
+    }
   }
 
   return db;
@@ -54,18 +65,23 @@ function createServer() {
       return res.status(400).json({ error: "Invalid address" });
     }
 
-    const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
-    if (!rootRow) return res.status(500).json({ error: "Root not set" });
+    try {
+      const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
+      if (!rootRow) return res.status(500).json({ error: "Root not set" });
 
-    const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(address);
-    const qualified = !!claimRow;
-    res.json({
-      qualified,
-      address,
-      merkleRoot: rootRow.root,
-      claimAmount: rootRow.claim_amount,
-      proof: claimRow ? JSON.parse(claimRow.proof) : [],
-    });
+      const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(address);
+      const qualified = !!claimRow;
+      res.json({
+        qualified,
+        address,
+        merkleRoot: rootRow.root,
+        claimAmount: rootRow.claim_amount,
+        proof: claimRow ? JSON.parse(claimRow.proof) : [],
+      });
+    } catch (err) {
+      console.error("Eligibility check error:", err.message);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   app.listen(PORT, () => {

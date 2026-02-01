@@ -45,7 +45,6 @@ function main() {
     merkleRoot: tree.getHexRoot(),
     claims: entries.map((entry) => ({
       address: entry.address,
-      privateKey: entry.privateKey,
       proof: proofs[entry.address.toLowerCase()]
     }))
   };

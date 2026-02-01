@@ -12,12 +12,26 @@
   const $ = (id) => document.getElementById(id);
 
   async function loadAirdrop() {
-    const res = await fetch("./airdrop.json");
-    const data = await res.json();
-    state.claims = data.claims || [];
-    state.merkleRoot = (data.merkleRoot || "").toLowerCase();
-    state.claimAmount = data.claimAmount || "100";
-    render(data);
+    try {
+      const res = await fetch("./airdrop.json");
+      if (!res.ok) {
+        throw new Error(`Failed to fetch airdrop.json: ${res.statusText}`);
+      }
+      const data = await res.json();
+      if (!data.merkleRoot) {
+        throw new Error("Invalid airdrop.json: missing merkleRoot");
+      }
+      state.claims = data.claims || [];
+      state.merkleRoot = (data.merkleRoot || "").toLowerCase();
+      state.claimAmount = data.claimAmount || "100";
+      render(data);
+    } catch (err) {
+      console.error("Error loading airdrop:", err.message);
+      if ($("status")) {
+        $("status").textContent = "Failed to load airdrop.json: " + err.message;
+        $("status").className = "danger";
+      }
+    }
   }
 
   function render(data) {
@@ -93,12 +107,18 @@
   }
 
   function hashAddress(address) {
-    const addr = ethers.getAddress(address); // checksummed or throws
-    return ethers.keccak256(ethers.solidityPacked(["address"], [addr]));
+    try {
+      const addr = ethers.getAddress(address);
+      return ethers.keccak256(ethers.solidityPacked(["address"], [addr]));
+    } catch (err) {
+      console.error("Invalid address:", err.message);
+      return null;
+    }
   }
 
   function verifyProof(address, proof, root) {
     let hash = hashAddress(address);
+    if (!hash) return false;
     for (const sibling of proof) {
       const a = ethers.getBytes(hash);
       const b = ethers.getBytes(sibling);
@@ -260,6 +280,13 @@
   $("address").addEventListener("blur", async () => {
     const address = $("address").value.trim();
     if (!address) return;
+    try {
+      ethers.getAddress(address);
+    } catch (err) {
+      $("status").textContent = "Invalid Ethereum address format.";
+      $("status").className = "danger";
+      return;
+    }
     try {
       const data = await fetchEligibility(address);
       applyEligibility(data);
