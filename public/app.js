@@ -48,6 +48,9 @@
         }
       }
     }
+    if (lastError && lastError.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms`);
+    }
     throw lastError;
   }
 
@@ -382,7 +385,8 @@
       applyEligibility(data);
     } catch (err) {
       console.error("Eligibility error:", err);
-      $("status").textContent = err.message === "Request timeout after 10000ms" ? "Request timed out. Please try again." : "Eligibility lookup failed.";
+      const isTimeout = err.message && err.message.includes("timeout");
+      $("status").textContent = isTimeout ? "Request timed out. Please try again." : "Eligibility lookup failed.";
       $("status").className = "danger";
     }
   });

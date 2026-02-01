@@ -221,12 +221,10 @@ contract FairCoin is Pausable {
         emit Sync(reserveFair, reserveEth);
     }
 
-    receive() external payable {
+    receive() external payable nonReentrant {
         if (msg.value > 0) {
             emit EthReceived(msg.sender, msg.value);
         }
-        if (msg.value > 0 || reserveFair > 0) {
-            _sync();
-        }
+        _sync();
     }
 }

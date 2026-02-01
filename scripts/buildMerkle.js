@@ -48,9 +48,15 @@ function main() {
       throw new Error("Sample accounts array is empty");
     }
     
-    for (const entry of entries) {
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
       if (!entry.address || typeof entry.address !== "string") {
-        throw new Error("Invalid entry: missing or invalid address");
+        throw new Error(`Invalid entry at index ${i}: missing or invalid address`);
+      }
+      try {
+        hashAddress(entry.address);
+      } catch (err) {
+        throw new Error(`Invalid entry at index ${i}: ${err.message}`);
       }
     }
     

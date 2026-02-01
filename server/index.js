@@ -134,6 +134,36 @@ function createServer() {
   validateConfig();
   const db = initDb();
   const app = express();
+
+  const gracefulShutdown = (signal) => {
+    logger.info(`${signal} received: closing server gracefully...`);
+    server.close(() => {
+      logger.info('Server closed');
+      db.close();
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      try {
+        db.close();
+      } catch (err) {
+        logger.error(`Error closing DB during forced shutdown: ${err.message}`);
+      }
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('uncaughtException', (err) => {
+    logger.error(`Uncaught exception: ${err.message}`);
+    gracefulShutdown('uncaughtException');
+  });
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error(`Unhandled rejection at ${promise}: ${reason}`);
+    gracefulShutdown('unhandledRejection');
+  });
   
   app.use(helmet({
     contentSecurityPolicy: {
@@ -146,7 +176,25 @@ function createServer() {
     },
   }));
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:4173'];
-  app.use(cors({ origin: allowedOrigins, credentials: true }));
+  app.use(cors({ 
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const isAllowed = allowedOrigins.some(allowed => {
+        try {
+          return new URL(origin).origin === new URL(allowed).origin;
+        } catch {
+          return false;
+        }
+      });
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        logger.warn(`CORS blocked for origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true 
+  }));
   app.use(express.json({ limit: '100kb' }));
   app.use((req, res, next) => {
     req.setTimeout(30000);
@@ -250,23 +298,6 @@ function createServer() {
   const server = app.listen(PORT, () => {
     logger.info(`FairCoin API/UI running on http://localhost:${PORT}`);
   });
-
-  const gracefulShutdown = (signal) => {
-    logger.info(`${signal} received: closing server gracefully...`);
-    server.close(() => {
-      logger.info('Server closed');
-      db.close();
-      process.exit(0);
-    });
-
-    setTimeout(() => {
-      logger.error('Forced shutdown after timeout');
-      process.exit(1);
-    }, 10000);
-  };
-
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 createServer();
