@@ -11,9 +11,70 @@
 
   const $ = (id) => document.getElementById(id);
 
+  async function fetchWithTimeout(url, options = {}, timeout = 10000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(id);
+      return response;
+    } catch (error) {
+      clearTimeout(id);
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${timeout}ms`);
+      }
+      throw error;
+    }
+  }
+
+  async function fetchWithRetry(url, options = {}, maxRetries = 3, timeout = 10000) {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetchWithTimeout(url, options, timeout);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response;
+      } catch (err) {
+        lastError = err;
+        if (i < maxRetries - 1) {
+          const delay = Math.pow(2, i) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  function validateClaimsData(claims) {
+    if (!Array.isArray(claims) || claims.length === 0) {
+      throw new Error("Invalid claims data: must be non-empty array");
+    }
+    for (let i = 0; i < claims.length; i++) {
+      const claim = claims[i];
+      if (!claim || typeof claim !== 'object') {
+        throw new Error(`Invalid claim at index ${i}: must be an object`);
+      }
+      if (!claim.address || typeof claim.address !== 'string') {
+        throw new Error(`Invalid claim at index ${i}: missing address`);
+      }
+      if (!/^0x[a-fA-F0-9]{40}$/.test(claim.address)) {
+        throw new Error(`Invalid claim at index ${i}: invalid address format`);
+      }
+      if (!Array.isArray(claim.proof)) {
+        throw new Error(`Invalid claim at index ${i}: missing proof array`);
+      }
+    }
+  }
+
   async function loadAirdrop() {
     try {
-      const res = await fetch("./airdrop.json");
+      const res = await fetchWithTimeout("./airdrop.json", {}, 10000);
       if (!res.ok) {
         throw new Error(`Failed to fetch airdrop.json: ${res.statusText}`);
       }
@@ -24,6 +85,7 @@
       if (!Array.isArray(data.claims)) {
         throw new Error("Invalid airdrop.json: claims must be an array");
       }
+      validateClaimsData(data.claims);
       state.claims = data.claims || [];
       state.merkleRoot = (data.merkleRoot || "").toLowerCase();
       state.claimAmount = data.claimAmount || "100";
@@ -66,7 +128,6 @@
       });
     }
 
-    // Prefill first account
     if (state.claims[0]) {
       selectAccount(0);
     }
@@ -169,11 +230,7 @@
 
   async function fetchEligibility(address) {
     try {
-      const res = await fetch(`/api/eligibility?address=${encodeURIComponent(address)}`);
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(errorData.error || "eligibility fetch failed");
-      }
+      const res = await fetchWithRetry(`/api/eligibility?address=${encodeURIComponent(address)}`, {}, 2, 10000);
       return res.json();
     } catch (err) {
       console.error("Eligibility API error:", err.message);

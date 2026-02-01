@@ -61,6 +61,7 @@ contract FairCoin is Pausable {
 
     constructor(bytes32 _merkleRoot, address _founder) {
         require(_founder != address(0), "FOUNDER_REQUIRED");
+        require(_merkleRoot != bytes32(0), "INVALID_MERKLE_ROOT");
         founder = _founder;
         merkleRoot = _merkleRoot;
     }
@@ -223,6 +224,8 @@ contract FairCoin is Pausable {
         if (msg.value > 0) {
             emit EthReceived(msg.sender, msg.value);
         }
-        _sync();
+        if (msg.value > 0 || reserveFair > 0) {
+            _sync();
+        }
     }
 }

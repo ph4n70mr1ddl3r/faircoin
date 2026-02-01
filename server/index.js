@@ -7,6 +7,12 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const { ethers } = require("ethers");
 
+const logger = {
+  info: (msg) => console.log(`[INFO] ${new Date().toISOString()} - ${msg}`),
+  error: (msg) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`),
+  warn: (msg) => console.warn(`[WARN] ${new Date().toISOString()} - ${msg}`)
+};
+
 const PORT = process.env.PORT || 4173;
 const DB_PATH = path.join(__dirname, "airdrop.db");
 const AIRDROP_JSON = path.join(__dirname, "..", "public", "airdrop.json");
@@ -29,11 +35,44 @@ function validateAddress(address) {
   if (!address || typeof address !== 'string') {
     return false;
   }
+  if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
+    return false;
+  }
   try {
     ethers.getAddress(address);
     return true;
   } catch {
     return false;
+  }
+}
+
+function validateClaimsData(claims) {
+  if (!Array.isArray(claims)) {
+    throw new Error("Claims must be an array");
+  }
+  if (claims.length === 0) {
+    throw new Error("Claims array cannot be empty");
+  }
+  for (let i = 0; i < claims.length; i++) {
+    const claim = claims[i];
+    if (!claim || typeof claim !== 'object') {
+      throw new Error(`Claim at index ${i} must be an object`);
+    }
+    if (!claim.address || typeof claim.address !== 'string') {
+      throw new Error(`Claim at index ${i} missing valid address`);
+    }
+    if (!validateAddress(claim.address)) {
+      throw new Error(`Claim at index ${i} has invalid address: ${claim.address}`);
+    }
+    if (!Array.isArray(claim.proof)) {
+      throw new Error(`Claim at index ${i} must have a proof array`);
+    }
+    for (let j = 0; j < claim.proof.length; j++) {
+      const proofItem = claim.proof[j];
+      if (!proofItem || typeof proofItem !== 'string' || proofItem.length !== 66) {
+        throw new Error(`Invalid proof format at index ${i}, proof position ${j}`);
+      }
+    }
   }
 }
 
@@ -66,29 +105,23 @@ function initDb() {
       if (!isValidMerkleRoot(raw.merkleRoot)) {
         throw new Error("Invalid airdrop.json: invalid merkleRoot format");
       }
+      const entries = raw.claims || [];
+      validateClaimsData(entries);
+      
       const insertRoot = db.prepare("INSERT INTO merkle_root (id, root, claim_amount) VALUES (1, ?, ?)");
       insertRoot.run(raw.merkleRoot.toLowerCase(), raw.claimAmount || "100");
 
       const insertClaim = db.prepare("INSERT INTO claims (address, proof) VALUES (?, ?)");
-      const entries = raw.claims || [];
       const tx = db.transaction(() => {
         for (const c of entries) {
           const address = String(c.address).toLowerCase();
-          const addressRegex = /^0x[a-f0-9]{40}$/;
-          if (!addressRegex.test(address)) {
-            throw new Error(`Invalid address format: ${address}`);
-          }
-          const proof = c.proof || [];
-          if (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66)) {
-            throw new Error(`Invalid proof format for address: ${address}`);
-          }
-          insertClaim.run(address, JSON.stringify(proof));
+          insertClaim.run(address, JSON.stringify(c.proof));
         }
       });
       tx();
-      console.log(`Seeded DB with root ${raw.merkleRoot} and ${entries.length} claims.`);
+      logger.info(`Seeded DB with root ${raw.merkleRoot} and ${entries.length} claims.`);
     } catch (err) {
-      console.error("Failed to seed database:", err.message);
+      logger.error(`Failed to seed database: ${err.message}`);
       throw err;
     }
   }
@@ -101,12 +134,22 @@ function createServer() {
   const db = initDb();
   const app = express();
   
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: ["'self'", "https:"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+  }));
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:4173'];
-  app.use(cors({ origin: allowedOrigins }));
+  app.use(cors({ origin: allowedOrigins, credentials: true }));
   app.use(express.json({ limit: '100kb' }));
   app.use((req, res, next) => {
     req.setTimeout(30000);
+    res.setTimeout(30000);
     next();
   });
 
@@ -130,6 +173,7 @@ function createServer() {
         totalClaims: claimCount?.count || 0
       });
     } catch (err) {
+      logger.error(`Health check failed: ${err.message}`);
       res.status(500).json({ status: "error", message: err.message });
     }
   });
@@ -150,12 +194,12 @@ function createServer() {
 
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
       if (!rootRow) {
-        console.error("Merkle root not found in database");
+        logger.error("Merkle root not found in database");
         return res.status(500).json({ error: "Merkle root not configured" });
       }
 
       if (!isValidMerkleRoot(rootRow.root)) {
-        console.error("Invalid merkle root format in database");
+        logger.error("Invalid merkle root format in database");
         return res.status(500).json({ error: "Invalid merkle root configuration" });
       }
 
@@ -167,11 +211,11 @@ function createServer() {
         try {
           proof = JSON.parse(claimRow.proof);
           if (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66)) {
-            console.error("Invalid proof format in database for address");
+            logger.error("Invalid proof format in database for address");
             return res.status(500).json({ error: "Invalid proof data" });
           }
         } catch (parseError) {
-          console.error("Failed to parse proof JSON:", parseError.message);
+          logger.error(`Failed to parse proof JSON: ${parseError.message}`);
           return res.status(500).json({ error: "Invalid proof data format" });
         }
       }
@@ -184,14 +228,36 @@ function createServer() {
         proof,
       });
     } catch (err) {
-      console.error("Eligibility check error:", err.message);
+      logger.error(`Eligibility check error: ${err.message}`);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  app.listen(PORT, () => {
-    console.log(`FairCoin API/UI running on http://localhost:${PORT}`);
+  app.use((err, req, res, next) => {
+    logger.error(`Unhandled error: ${err.message}`);
+    res.status(500).json({ error: "Internal server error" });
   });
+
+  const server = app.listen(PORT, () => {
+    logger.info(`FairCoin API/UI running on http://localhost:${PORT}`);
+  });
+
+  const gracefulShutdown = (signal) => {
+    logger.info(`${signal} received: closing server gracefully...`);
+    server.close(() => {
+      logger.info('Server closed');
+      db.close();
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 createServer();
