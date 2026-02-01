@@ -113,15 +113,17 @@ contract FairCoin is Pausable {
         require(bal >= amount, "BALANCE");
         unchecked {
             _balances[from] = bal - amount;
+            _balances[to] += amount;
         }
-        _balances[to] += amount;
         emit Transfer(from, to, amount);
     }
 
     function _mint(address to, uint256 amount) internal {
         require(totalSupply + amount <= MAX_SUPPLY, "MAX_SUPPLY");
-        totalSupply += amount;
-        _balances[to] += amount;
+        unchecked {
+            totalSupply += amount;
+            _balances[to] += amount;
+        }
         emit Transfer(address(0), to, amount);
     }
 
@@ -191,10 +193,12 @@ contract FairCoin is Pausable {
         _transfer(msg.sender, address(this), fairAmount);
 
         uint256 fee = fairAmount / FEE_DENOMINATOR;
-        uint256 amountInAfterFee = fairAmount - fee;
-        if (fee > 0) {
-            _transfer(address(this), founder, fee);
+        if (fee == 0 && fairAmount > 0) {
+            fee = 1;
         }
+        uint256 amountInAfterFee = fairAmount - fee;
+
+        _transfer(address(this), founder, fee);
 
         uint256 ethOut = _getAmountOut(amountInAfterFee, reserveFair, reserveEth);
         require(ethOut > 0, "NO_LIQUIDITY");

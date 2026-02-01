@@ -7,6 +7,7 @@
     signer: null,
     walletAddress: "",
     chainId: "",
+    injectedProvider: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -262,18 +263,24 @@
       $("wallet-status").className = "danger";
       return;
     }
-    
+
     const injected = pickMetaMaskProvider();
     if (!injected) {
       $("wallet-status").textContent = "No injected wallet detected. Install MetaMask or enable an injected provider.";
       $("wallet-status").className = "danger";
       return;
     }
-    
+
+    if (state.injectedProvider && state.injectedProvider !== injected) {
+      state.injectedProvider.removeListener?.("accountsChanged", onAccountsChanged);
+      state.injectedProvider.removeListener?.("chainChanged", onChainChanged);
+    }
+
     try {
       $("wallet-status").textContent = "Connecting...";
       $("wallet-status").className = "pill";
-      
+
+      state.injectedProvider = injected;
       state.provider = new ethers.BrowserProvider(injected);
       await state.provider.send("eth_requestAccounts", []);
       state.signer = await state.provider.getSigner();
@@ -299,8 +306,8 @@
       }
 
       injected.removeListener?.("accountsChanged", onAccountsChanged);
-      injected.on?.("accountsChanged", onAccountsChanged);
       injected.removeListener?.("chainChanged", onChainChanged);
+      injected.on?.("accountsChanged", onAccountsChanged);
       injected.on?.("chainChanged", onChainChanged);
     } catch (err) {
       console.error("Wallet connection error:", err.message);

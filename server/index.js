@@ -134,14 +134,20 @@ function createServer() {
   validateConfig();
   const db = initDb();
   const app = express();
+  let server = null;
 
   const gracefulShutdown = (signal) => {
     logger.info(`${signal} received: closing server gracefully...`);
-    server.close(() => {
-      logger.info('Server closed');
+    if (server) {
+      server.close(() => {
+        logger.info('Server closed');
+        db.close();
+        process.exit(0);
+      });
+    } else {
       db.close();
       process.exit(0);
-    });
+    }
 
     setTimeout(() => {
       logger.error('Forced shutdown after timeout');
@@ -175,10 +181,14 @@ function createServer() {
       },
     },
   }));
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:4173'];
-  app.use(cors({ 
+  const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+  app.use(cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
+      if (allowedOrigins.length === 0) {
+        logger.warn(`CORS blocked: no allowed origins configured (set ALLOWED_ORIGINS env var)`);
+        return callback(new Error('Not allowed by CORS'));
+      }
       const isAllowed = allowedOrigins.some(allowed => {
         try {
           return new URL(origin).origin === new URL(allowed).origin;
@@ -193,7 +203,7 @@ function createServer() {
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true 
+    credentials: true
   }));
   app.use(express.json({ limit: '100kb' }));
   app.use((req, res, next) => {
@@ -263,11 +273,11 @@ function createServer() {
       const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(normalizedAddress);
       const qualified = !!claimRow;
       let proof = [];
-      
+
       if (claimRow) {
         try {
           proof = JSON.parse(claimRow.proof);
-          if (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66)) {
+          if (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || !item.startsWith("0x") || item.length !== 66 || !isValidMerkleRoot(item))) {
             logger.error("Invalid proof format in database for address");
             return res.status(500).json({ error: "Invalid proof data" });
           }
@@ -295,7 +305,7 @@ function createServer() {
     res.status(500).json({ error: "Internal server error" });
   });
 
-  const server = app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     logger.info(`FairCoin API/UI running on http://localhost:${PORT}`);
   });
 }
