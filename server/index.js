@@ -9,6 +9,7 @@ const AIRDROP_JSON = path.join(__dirname, "..", "public", "airdrop.json");
 
 function initDb() {
   const db = new Database(DB_PATH);
+  db.pragma("journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS merkle_root (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -16,9 +17,10 @@ function initDb() {
       claim_amount TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS claims (
-      address TEXT PRIMARY KEY,
+      address TEXT PRIMARY KEY COLLATE NOCASE,
       proof TEXT NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS idx_claims_address ON claims(address);
   `);
 
   const row = db.prepare("SELECT root FROM merkle_root WHERE id = 1").get();
@@ -37,9 +39,18 @@ function initDb() {
       const insertClaim = db.prepare("INSERT INTO claims (address, proof) VALUES (?, ?)");
       const entries = raw.claims || [];
       const tx = db.transaction(() => {
-        entries.forEach((c) => {
-          insertClaim.run(c.address.toLowerCase(), JSON.stringify(c.proof || []));
-        });
+        for (const c of entries) {
+          const address = String(c.address).toLowerCase();
+          const addressRegex = /^0x[a-f0-9]{40}$/;
+          if (!addressRegex.test(address)) {
+            throw new Error(`Invalid address format: ${address}`);
+          }
+          const proof = c.proof || [];
+          if (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66)) {
+            throw new Error(`Invalid proof format for address: ${address}`);
+          }
+          insertClaim.run(address, JSON.stringify(proof));
+        }
       });
       tx();
       console.log(`Seeded DB with root ${raw.merkleRoot} and ${entries.length} claims.`);
@@ -65,18 +76,30 @@ function createServer() {
       return res.status(400).json({ error: "Invalid address" });
     }
 
+    const addressRegex = /^0x[a-f0-9]{40}$/;
+    if (!addressRegex.test(address)) {
+      return res.status(400).json({ error: "Invalid Ethereum address format" });
+    }
+
     try {
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
       if (!rootRow) return res.status(500).json({ error: "Root not set" });
 
       const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(address);
       const qualified = !!claimRow;
+      const proof = claimRow ? JSON.parse(claimRow.proof) : [];
+
+      if (claimRow && (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66))) {
+        console.error("Invalid proof format in database for address:", address);
+        return res.status(500).json({ error: "Invalid proof data" });
+      }
+
       res.json({
         qualified,
         address,
         merkleRoot: rootRow.root,
         claimAmount: rootRow.claim_amount,
-        proof: claimRow ? JSON.parse(claimRow.proof) : [],
+        proof,
       });
     } catch (err) {
       console.error("Eligibility check error:", err.message);

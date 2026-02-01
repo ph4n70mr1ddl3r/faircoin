@@ -45,7 +45,7 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${claim.address}</td>
-          <td><span class="muted">${shorten(claim.privateKey || "n/a")}</span></td>
+          <td><span class="muted">hidden</span></td>
           <td><code class="inline">${shorten((claim.proof || []).join(",") || "n/a")}</code></td>
         `;
         tbody.appendChild(tr);
@@ -80,7 +80,7 @@
     const claim = state.claims[idx];
     if (!claim) return;
     $("address").value = claim.address;
-    if ($("privateKey")) $("privateKey").value = claim.privateKey || "";
+    if ($("privateKey")) $("privateKey").value = "";
     $("proof").value = JSON.stringify(claim.proof || [], null, 2);
     $("status").textContent = "Proof pulled from the generated Merkle tree.";
     $("status").className = "success";
@@ -100,8 +100,13 @@
     if (!text) return [];
     try {
       const parsed = JSON.parse(text);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      if (parsed.some(item => !item || typeof item !== "string" || item.length !== 66)) {
+        throw new Error("Invalid proof format");
+      }
+      return parsed;
     } catch (err) {
+      console.error("Proof parsing error:", err.message);
       return [];
     }
   }

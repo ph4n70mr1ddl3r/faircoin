@@ -26,7 +26,9 @@ contract FairCoin {
 
     address public immutable founder;
     bytes32 public immutable merkleRoot;
-    uint256 public immutable claimAmount = 100 * 1e18; // 100 FAIR with 18 decimals
+    uint256 public constant CLAIM_AMOUNT = 100 * 1e18; // 100 FAIR with 18 decimals
+    uint256 public constant POOL_DIVISOR = 20; // 5 FAIR to pool (100 / 20 = 5)
+    uint256 public constant FEE_DENOMINATOR = 1000; // 0.1% fee (1 / 1000)
 
     mapping(address => bool) public claimed;
 
@@ -117,8 +119,8 @@ contract FairCoin {
 
         claimed[msg.sender] = true;
 
-        uint256 poolCut = claimAmount / 20; // 5 FAIR of the 100 FAIR
-        uint256 userCut = claimAmount - poolCut;
+        uint256 poolCut = CLAIM_AMOUNT / POOL_DIVISOR;
+        uint256 userCut = CLAIM_AMOUNT - poolCut;
 
         _mint(msg.sender, userCut);
         _mint(address(this), poolCut);
@@ -168,7 +170,7 @@ contract FairCoin {
 
         _transfer(msg.sender, address(this), fairAmount);
 
-        uint256 fee = fairAmount / 1000; // 0.1%
+        uint256 fee = fairAmount / FEE_DENOMINATOR;
         uint256 amountInAfterFee = fairAmount - fee;
         if (fee > 0) {
             _balances[address(this)] -= fee;

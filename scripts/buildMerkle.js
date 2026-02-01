@@ -6,7 +6,7 @@ const { keccak256, solidityPacked } = require("ethers");
 const SAMPLE_PATH = path.join(__dirname, "..", "data", "sample-accounts.json");
 const OUTPUT_PATH = path.join(__dirname, "..", "public", "airdrop.json");
 
-const CLAIM_AMOUNT = "100"; // FAIR to mint on claim
+const CLAIM_AMOUNT = "100";
 
 function hashAddress(address) {
   // keccak256(abi.encodePacked(address))

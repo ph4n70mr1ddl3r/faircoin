@@ -60,6 +60,10 @@ describe("FairCoin", function () {
       .to.emit(fair, "Claimed")
       .withArgs(user.address, 95n * WAD, 5n * WAD);
 
+    expect(await fair.CLAIM_AMOUNT()).to.equal(100n * WAD);
+    expect(await fair.POOL_DIVISOR()).to.equal(20n);
+    expect(await fair.FEE_DENOMINATOR()).to.equal(1000n);
+
     expect(await fair.balanceOf(user.address)).to.equal(95n * WAD);
     expect(await fair.balanceOf(await fair.getAddress())).to.equal(5n * WAD);
     expect(await fair.totalSupply()).to.equal(100n * WAD);
