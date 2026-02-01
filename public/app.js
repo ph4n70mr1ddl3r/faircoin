@@ -104,7 +104,7 @@
     try {
       const parsed = JSON.parse(text);
       if (!Array.isArray(parsed)) return [];
-      if (parsed.some(item => !item || typeof item !== "string" || item.length !== 66)) {
+      if (parsed.some(item => !item || typeof item !== "string" || !item.startsWith("0x") || item.length !== 66)) {
         throw new Error("Invalid proof format");
       }
       return parsed;

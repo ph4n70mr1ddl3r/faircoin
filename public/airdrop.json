@@ -9,7 +9,6 @@
   "claims": [
     {
       "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "privateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
       "proof": [
         "0x00314e565e0574cb412563df634608d76f5c59d9f817e85966100ec1d48005c0",
         "0x7e0eefeb2d8740528b8f598997a219669f0842302d3c573e9bb7262be3387e63"
@@ -17,7 +16,6 @@
     },
     {
       "address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-      "privateKey": "0x59c6995e998f97a5a0044966f094538e02ce8ba0e53c8c284fcf477f6f82af51",
       "proof": [
         "0xe9707d0e6171f728f7473c24cc0432a9b07eaaf1efed6a137a4a8c12c79552d9",
         "0x7e0eefeb2d8740528b8f598997a219669f0842302d3c573e9bb7262be3387e63"
@@ -25,7 +23,6 @@
     },
     {
       "address": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-      "privateKey": "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
       "proof": [
         "0x1ebaa930b8e9130423c183bf38b0564b0103180b7dad301013b18e59880541ae",
         "0x070e8db97b197cc0e4a1790c5e6c3667bab32d733db7f815fbe84f5824c7168d"
@@ -33,7 +30,6 @@
     },
     {
       "address": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
-      "privateKey": "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733626b3cfb1f03cbea",
       "proof": [
         "0x8a3552d60a98e0ade765adddad0a2e420ca9b1eef5f326ba7ab860bb4ea72c94",
         "0x070e8db97b197cc0e4a1790c5e6c3667bab32d733db7f815fbe84f5824c7168d"

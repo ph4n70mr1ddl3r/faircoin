@@ -102,8 +102,9 @@ function createServer() {
   const app = express();
   
   app.use(helmet());
-  app.use(cors({ origin: process.env.ALLOWED_ORIGINS?.split(',') || '*' }));
-  app.use(express.json({ limit: '1mb' }));
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:4173'];
+  app.use(cors({ origin: allowedOrigins }));
+  app.use(express.json({ limit: '100kb' }));
   app.use((req, res, next) => {
     req.setTimeout(30000);
     next();
@@ -117,6 +118,21 @@ function createServer() {
 
   app.use("/api", apiLimiter);
   app.use(express.static(path.join(__dirname, "..", "public")));
+
+  app.get("/health", (req, res) => {
+    try {
+      const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
+      const claimCount = db.prepare("SELECT COUNT(*) as count FROM claims").get();
+      res.json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        merkleRootConfigured: !!rootRow?.root,
+        totalClaims: claimCount?.count || 0
+      });
+    } catch (err) {
+      res.status(500).json({ status: "error", message: err.message });
+    }
+  });
 
   app.get("/api/eligibility", (req, res) => {
     try {
