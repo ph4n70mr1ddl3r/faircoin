@@ -56,11 +56,10 @@ function main() {
     
     const { tree, leaves } = buildTree(entries);
 
-    const proofs = {};
-    entries.forEach((entry, idx) => {
-      const proof = tree.getHexProof(leaves[idx]);
-      proofs[entry.address.toLowerCase()] = proof;
-    });
+    const proofs = entries.reduce((acc, entry, idx) => {
+      acc[entry.address.toLowerCase()] = tree.getHexProof(leaves[idx]);
+      return acc;
+    }, {});
 
     const payload = {
       token: {

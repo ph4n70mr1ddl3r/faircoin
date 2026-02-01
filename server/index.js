@@ -21,6 +21,22 @@ function validateConfig() {
   }
 }
 
+function isValidMerkleRoot(root) {
+  return /^0x[a-f0-9]{64}$/i.test(root);
+}
+
+function validateAddress(address) {
+  if (!address || typeof address !== 'string') {
+    return false;
+  }
+  try {
+    ethers.getAddress(address);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function initDb() {
   const db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");
@@ -46,6 +62,9 @@ function initDb() {
       const raw = JSON.parse(fs.readFileSync(AIRDROP_JSON, "utf8"));
       if (!raw.merkleRoot) {
         throw new Error("Invalid airdrop.json: missing merkleRoot");
+      }
+      if (!isValidMerkleRoot(raw.merkleRoot)) {
+        throw new Error("Invalid airdrop.json: invalid merkleRoot format");
       }
       const insertRoot = db.prepare("INSERT INTO merkle_root (id, root, claim_amount) VALUES (1, ?, ?)");
       insertRoot.run(raw.merkleRoot.toLowerCase(), raw.claimAmount || "100");
@@ -102,11 +121,15 @@ function createServer() {
   app.get("/api/eligibility", (req, res) => {
     try {
       const address = String(req.query.address || "").trim();
-      try {
-        ethers.getAddress(address);
-      } catch {
+      
+      if (!address) {
+        return res.status(400).json({ error: "Address parameter is required" });
+      }
+      
+      if (!validateAddress(address)) {
         return res.status(400).json({ error: "Invalid Ethereum address format" });
       }
+      
       const normalizedAddress = address.toLowerCase();
 
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
@@ -115,13 +138,26 @@ function createServer() {
         return res.status(500).json({ error: "Merkle root not configured" });
       }
 
+      if (!isValidMerkleRoot(rootRow.root)) {
+        console.error("Invalid merkle root format in database");
+        return res.status(500).json({ error: "Invalid merkle root configuration" });
+      }
+
       const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(normalizedAddress);
       const qualified = !!claimRow;
-      const proof = claimRow ? JSON.parse(claimRow.proof) : [];
-
-      if (claimRow && (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66))) {
-        console.error("Invalid proof format in database for address");
-        return res.status(500).json({ error: "Invalid proof data" });
+      let proof = [];
+      
+      if (claimRow) {
+        try {
+          proof = JSON.parse(claimRow.proof);
+          if (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66)) {
+            console.error("Invalid proof format in database for address");
+            return res.status(500).json({ error: "Invalid proof data" });
+          }
+        } catch (parseError) {
+          console.error("Failed to parse proof JSON:", parseError.message);
+          return res.status(500).json({ error: "Invalid proof data format" });
+        }
       }
 
       res.json({

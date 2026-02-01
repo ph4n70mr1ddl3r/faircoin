@@ -31,12 +31,6 @@ function buildTree(entries) {
   return { root: tree.getHexRoot(), proofs };
 }
 
-function amountOutConstantProduct(amountIn, reserveIn, reserveOut) {
-  if (amountIn === 0n || reserveIn === 0n || reserveOut === 0n) return 0n;
-  const k = reserveIn * reserveOut;
-  return reserveOut - k / (reserveIn + amountIn);
-}
-
 describe("FairCoin", function () {
   async function deployFixture() {
     const entries = loadSample();

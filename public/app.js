@@ -197,6 +197,12 @@
   }
 
   async function connectWallet() {
+    if (typeof window === 'undefined') {
+      $("wallet-status").textContent = "Wallet not available in current environment.";
+      $("wallet-status").className = "danger";
+      return;
+    }
+    
     const injected = pickMetaMaskProvider();
     if (!injected) {
       $("wallet-status").textContent = "No injected wallet detected. Install MetaMask or enable an injected provider.";
@@ -233,6 +239,7 @@
       injected.removeListener?.("chainChanged", onChainChanged);
       injected.on?.("chainChanged", onChainChanged);
     } catch (err) {
+      console.error("Wallet connection error:", err.message);
       $("wallet-status").textContent = "Wallet connection rejected.";
       $("wallet-status").className = "danger";
     }

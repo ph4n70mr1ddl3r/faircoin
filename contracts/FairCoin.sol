@@ -2,8 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice ERC20 token that embeds an ownerless constant-product market maker.
 /// Merkle claims mint 100 FAIR; 95 FAIR go to the claimer and 5 FAIR seed the pool.
@@ -35,8 +33,6 @@ contract FairCoin is Pausable {
     uint256 public constant FEE_DENOMINATOR = 1000;
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18;
 
-    using SafeERC20 for IERC20;
-
     mapping(address => bool) public claimed;
 
     event Claimed(address indexed account, uint256 userAmount, uint256 poolAmount);
@@ -52,6 +48,7 @@ contract FairCoin is Pausable {
     event Donation(address indexed from, uint256 fairAmount, uint256 ethAmount);
     event Buy(address indexed buyer, uint256 ethIn, uint256 fairOut);
     event Sell(address indexed seller, uint256 fairIn, uint256 fee, uint256 ethOut);
+    event EthReceived(address indexed from, uint256 amount);
 
     bool private _locked;
 
@@ -194,7 +191,7 @@ contract FairCoin is Pausable {
         uint256 fee = fairAmount / FEE_DENOMINATOR;
         uint256 amountInAfterFee = fairAmount - fee;
         if (fee > 0) {
-            IERC20(address(this)).safeTransfer(founder, fee);
+            _transfer(address(this), founder, fee);
         }
 
         uint256 ethOut = _getAmountOut(amountInAfterFee, reserveFair, reserveEth);
@@ -223,6 +220,9 @@ contract FairCoin is Pausable {
     }
 
     receive() external payable {
+        if (msg.value > 0) {
+            emit EthReceived(msg.sender, msg.value);
+        }
         _sync();
     }
 }
