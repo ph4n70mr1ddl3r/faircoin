@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 /// @notice ERC20 token that embeds an ownerless constant-product market maker.
 /// Merkle claims mint 100 FAIR; 95 FAIR go to the claimer and 5 FAIR seed the pool.
 /// Selling FAIR for ETH has a 0.1% fee that routes to the founder; buying FAIR with ETH is fee-free.
-contract FairCoin {
+contract FairCoin is Pausable {
     /*//////////////////////////////////////////////////////////////
                                 ERC20
     //////////////////////////////////////////////////////////////*/
@@ -21,14 +25,17 @@ contract FairCoin {
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /*//////////////////////////////////////////////////////////////
-                           AIRDROP + ADMIN
+                            AIRDROP + ADMIN
     //////////////////////////////////////////////////////////////*/
 
     address public immutable founder;
     bytes32 public immutable merkleRoot;
-    uint256 public constant CLAIM_AMOUNT = 100 * 1e18; // 100 FAIR with 18 decimals
-    uint256 public constant POOL_DIVISOR = 20; // 5 FAIR to pool (100 / 20 = 5)
-    uint256 public constant FEE_DENOMINATOR = 1000; // 0.1% fee (1 / 1000)
+    uint256 public constant CLAIM_AMOUNT = 100 * 1e18;
+    uint256 public constant POOL_DIVISOR = 20;
+    uint256 public constant FEE_DENOMINATOR = 1000;
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18;
+
+    using SafeERC20 for IERC20;
 
     mapping(address => bool) public claimed;
 
@@ -59,6 +66,16 @@ contract FairCoin {
         require(_founder != address(0), "FOUNDER_REQUIRED");
         founder = _founder;
         merkleRoot = _merkleRoot;
+    }
+
+    function pause() external {
+        require(msg.sender == founder, "NOT_FOUNDER");
+        _pause();
+    }
+
+    function unpause() external {
+        require(msg.sender == founder, "NOT_FOUNDER");
+        _unpause();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -104,6 +121,7 @@ contract FairCoin {
     }
 
     function _mint(address to, uint256 amount) internal {
+        require(totalSupply + amount <= MAX_SUPPLY, "MAX_SUPPLY");
         totalSupply += amount;
         _balances[to] += amount;
         emit Transfer(address(0), to, amount);
@@ -113,7 +131,7 @@ contract FairCoin {
                            MERKLE CLAIMING
     //////////////////////////////////////////////////////////////*/
 
-    function claim(bytes32[] calldata proof) external nonReentrant {
+    function claim(bytes32[] calldata proof) external nonReentrant whenNotPaused {
         require(!claimed[msg.sender], "ALREADY_CLAIMED");
         require(_verify(proof, msg.sender), "INVALID_PROOF");
 
@@ -157,17 +175,18 @@ contract FairCoin {
         emit Donation(msg.sender, fairAmount, msg.value);
     }
 
-    function buyFair() external payable nonReentrant {
+    function buyFair(uint256 minAmountOut) external payable nonReentrant whenNotPaused {
         require(msg.value > 0, "ZERO_IN");
         uint256 fairOut = _getAmountOut(msg.value, reserveEth, reserveFair);
         require(fairOut > 0, "NO_LIQUIDITY");
+        require(fairOut >= minAmountOut, "SLIPPAGE_EXCEEDED");
 
         _transfer(address(this), msg.sender, fairOut);
         _sync();
         emit Buy(msg.sender, msg.value, fairOut);
     }
 
-    function sellFair(uint256 fairAmount) external nonReentrant {
+    function sellFair(uint256 fairAmount, uint256 minEthOut) external nonReentrant whenNotPaused {
         require(fairAmount > 0, "ZERO_IN");
 
         _transfer(msg.sender, address(this), fairAmount);
@@ -175,13 +194,12 @@ contract FairCoin {
         uint256 fee = fairAmount / FEE_DENOMINATOR;
         uint256 amountInAfterFee = fairAmount - fee;
         if (fee > 0) {
-            _balances[address(this)] -= fee;
-            _balances[founder] += fee;
-            emit Transfer(address(this), founder, fee);
+            IERC20(address(this)).safeTransfer(founder, fee);
         }
 
         uint256 ethOut = _getAmountOut(amountInAfterFee, reserveFair, reserveEth);
         require(ethOut > 0, "NO_LIQUIDITY");
+        require(ethOut >= minEthOut, "SLIPPAGE_EXCEEDED");
         require(ethOut <= address(this).balance, "INSUFFICIENT_ETH");
 
         (bool ok, ) = msg.sender.call{value: ethOut}("");
@@ -193,9 +211,9 @@ contract FairCoin {
 
     function _getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) internal pure returns (uint256) {
         if (amountIn == 0 || reserveIn == 0 || reserveOut == 0) return 0;
-        // constant product: amountOut = reserveOut - (k / (reserveIn + amountIn))
-        uint256 k = reserveIn * reserveOut;
-        return reserveOut - (k / (reserveIn + amountIn));
+        uint256 numerator = reserveOut * amountIn;
+        uint256 denominator = reserveIn + amountIn;
+        return numerator / denominator;
     }
 
     function _sync() internal {

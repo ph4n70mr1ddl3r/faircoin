@@ -5,6 +5,7 @@ const fs = require("fs");
 const helmet = require("helmet");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
+const { ethers } = require("ethers");
 
 const PORT = process.env.PORT || 4173;
 const DB_PATH = path.join(__dirname, "airdrop.db");
@@ -82,8 +83,12 @@ function createServer() {
   const app = express();
   
   app.use(helmet());
-  app.use(cors());
-  app.use(express.json());
+  app.use(cors({ origin: process.env.ALLOWED_ORIGINS?.split(',') || '*' }));
+  app.use(express.json({ limit: '1mb' }));
+  app.use((req, res, next) => {
+    req.setTimeout(30000);
+    next();
+  });
 
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -91,15 +96,18 @@ function createServer() {
     message: { error: "Too many requests from this IP, please try again later." }
   });
 
+  app.use("/api", apiLimiter);
   app.use(express.static(path.join(__dirname, "..", "public")));
 
-  app.get("/api/eligibility", apiLimiter, (req, res) => {
+  app.get("/api/eligibility", (req, res) => {
     try {
-      const address = String(req.query.address || "").trim().toLowerCase();
-      const addressRegex = /^0x[a-f0-9]{40}$/;
-      if (!addressRegex.test(address)) {
+      const address = String(req.query.address || "").trim();
+      try {
+        ethers.getAddress(address);
+      } catch {
         return res.status(400).json({ error: "Invalid Ethereum address format" });
       }
+      const normalizedAddress = address.toLowerCase();
 
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
       if (!rootRow) {
@@ -107,18 +115,18 @@ function createServer() {
         return res.status(500).json({ error: "Merkle root not configured" });
       }
 
-      const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(address);
+      const claimRow = db.prepare("SELECT proof FROM claims WHERE address = ?").get(normalizedAddress);
       const qualified = !!claimRow;
       const proof = claimRow ? JSON.parse(claimRow.proof) : [];
 
       if (claimRow && (!Array.isArray(proof) || proof.some(item => !item || typeof item !== "string" || item.length !== 66))) {
-        console.error("Invalid proof format in database for address:", address);
+        console.error("Invalid proof format in database for address");
         return res.status(500).json({ error: "Invalid proof data" });
       }
 
       res.json({
         qualified,
-        address,
+        address: normalizedAddress,
         merkleRoot: rootRow.root,
         claimAmount: rootRow.claim_amount,
         proof,

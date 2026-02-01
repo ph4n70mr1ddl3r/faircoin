@@ -95,9 +95,9 @@ describe("FairCoin", function () {
     const reserveEthBefore = await fair.reserveEth();
 
     const ethIn = 1n * WAD;
-    const expectedFairOut = amountOutConstantProduct(ethIn, reserveEthBefore, reserveFairBefore);
+    const expectedFairOut = (reserveFairBefore * ethIn) / (reserveEthBefore + ethIn);
 
-    await expect(fair.connect(buyer).buyFair({ value: ethIn }))
+    await expect(fair.connect(buyer).buyFair(expectedFairOut, { value: ethIn }))
       .to.emit(fair, "Buy")
       .withArgs(buyer.address, ethIn, expectedFairOut);
 
@@ -130,9 +130,9 @@ describe("FairCoin", function () {
     const reserveFairBefore = await fair.reserveFair();
     const reserveEthBefore = await fair.reserveEth();
 
-    const expectedEthOut = amountOutConstantProduct(amountAfterFee, reserveFairBefore, reserveEthBefore);
+    const expectedEthOut = (reserveEthBefore * amountAfterFee) / (reserveFairBefore + amountAfterFee);
 
-    const txPromise = fair.connect(seller).sellFair(sellAmount);
+    const txPromise = fair.connect(seller).sellFair(sellAmount, expectedEthOut);
     await expect(txPromise)
       .to.emit(fair, "Sell")
       .withArgs(seller.address, sellAmount, fee, expectedEthOut);
@@ -170,30 +170,30 @@ describe("FairCoin", function () {
     await expect(fair.connect(donor).donate(donateFair, { value: 0 }))
       .to.emit(fair, "Donation")
       .withArgs(donor.address, donateFair, 0);
-    expect(await fair.reserveFair()).to.equal(donateFair);
+    expect(await fair.reserveFair()).to.equal(15n * WAD);
   });
 
   it("rejects buy with zero ETH", async function () {
     const { fair, signers } = await deployFixture();
-    await expect(fair.connect(signers[0]).buyFair({ value: 0 })).to.be.revertedWith("ZERO_IN");
+    await expect(fair.connect(signers[0]).buyFair(0, { value: 0 })).to.be.revertedWith("ZERO_IN");
   });
 
   it("rejects buy with no liquidity", async function () {
     const { fair, signers } = await deployFixture();
     const ethIn = 1n * WAD;
-    await expect(fair.connect(signers[0]).buyFair({ value: ethIn })).to.be.revertedWith("NO_LIQUIDITY");
+    await expect(fair.connect(signers[0]).buyFair(0, { value: ethIn })).to.be.revertedWith("NO_LIQUIDITY");
   });
 
   it("rejects sell with zero amount", async function () {
     const { fair, signers } = await deployFixture();
-    await expect(fair.connect(signers[0]).sellFair(0)).to.be.revertedWith("ZERO_IN");
+    await expect(fair.connect(signers[0]).sellFair(0, 0)).to.be.revertedWith("ZERO_IN");
   });
 
   it("rejects sell without sufficient balance", async function () {
     const { fair, signers } = await deployFixture();
     const seller = signers[0];
     const sellAmount = 100n * WAD;
-    await expect(fair.connect(seller).sellFair(sellAmount)).to.be.revertedWith("BALANCE");
+    await expect(fair.connect(seller).sellFair(sellAmount, 0)).to.be.revertedWith("BALANCE");
   });
 
   it("prevents reentrancy on claim", async function () {

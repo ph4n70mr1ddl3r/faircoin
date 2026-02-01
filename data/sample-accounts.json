@@ -1,22 +1,18 @@
 [
   {
     "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-    "privateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
     "note": "Anvil/Hardhat default #1"
   },
   {
     "address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-    "privateKey": "0x59c6995e998f97a5a0044966f094538e02ce8ba0e53c8c284fcf477f6f82af51",
     "note": "Anvil/Hardhat default #2"
   },
   {
     "address": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-    "privateKey": "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
     "note": "Anvil/Hardhat default #3"
   },
   {
     "address": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
-    "privateKey": "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733626b3cfb1f03cbea",
     "note": "Anvil/Hardhat default #4"
   }
 ]
