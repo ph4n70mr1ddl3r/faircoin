@@ -139,8 +139,6 @@ contract FairCoin is Pausable {
         require(!claimed[msg.sender], "ALREADY_CLAIMED");
         require(_verify(proof, msg.sender), "INVALID_PROOF");
 
-        require(totalSupply + USER_CUT + POOL_CUT <= MAX_SUPPLY, "MAX_SUPPLY");
-
         claimed[msg.sender] = true;
         _mint(msg.sender, USER_CUT);
         _mint(address(this), POOL_CUT);

@@ -137,30 +137,32 @@ function createServer() {
   const app = express();
   let server = null;
 
+  let shutdownTimer = null;
   const gracefulShutdown = (signal) => {
     logger.info(`${signal} received: closing server gracefully...`);
-    let shutdownTimer = null;
+    if (shutdownTimer) {
+      clearTimeout(shutdownTimer);
+      shutdownTimer = null;
+    }
     if (server) {
       server.close(() => {
-        if (shutdownTimer) clearTimeout(shutdownTimer);
         logger.info('Server closed');
         db.close();
         process.exit(0);
       });
+      shutdownTimer = setTimeout(() => {
+        logger.error('Forced shutdown after timeout');
+        try {
+          db.close();
+        } catch (err) {
+          logger.error(`Error closing DB during forced shutdown: ${err.message}`);
+        }
+        process.exit(1);
+      }, 10000);
     } else {
       db.close();
       process.exit(0);
     }
-
-    shutdownTimer = setTimeout(() => {
-      logger.error('Forced shutdown after timeout');
-      try {
-        db.close();
-      } catch (err) {
-        logger.error(`Error closing DB during forced shutdown: ${err.message}`);
-      }
-      process.exit(1);
-    }, 10000);
   };
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

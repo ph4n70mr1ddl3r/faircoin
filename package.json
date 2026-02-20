@@ -5,6 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "npx hardhat test",
+    "compile": "npx hardhat compile",
+    "lint": "npx hardhat compile",
+    "typecheck": "npx hardhat compile",
     "build:merkle": "node scripts/buildMerkle.js",
     "serve": "npx http-server public -p 4173",
     "dev": "node server/index.js"

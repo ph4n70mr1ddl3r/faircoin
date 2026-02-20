@@ -81,6 +81,22 @@ function main() {
       }))
     };
 
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const proof = proofs[entry.address.toLowerCase()];
+      let hash = hashAddress(entry.address);
+      for (const sibling of proof) {
+        const a = hash;
+        const b = Buffer.from(sibling.slice(2), "hex");
+        const pair = a.compare(b) < 0 ? Buffer.concat([a, b]) : Buffer.concat([b, a]);
+        hash = Buffer.from(keccak256(pair).slice(2), "hex");
+      }
+      const computedRoot = "0x" + hash.toString("hex");
+      if (computedRoot.toLowerCase() !== payload.merkleRoot.toLowerCase()) {
+        throw new Error(`Proof verification failed for ${entry.address}`);
+      }
+    }
+
     fs.mkdirSync(path.join(__dirname, "..", "public"), { recursive: true });
     if (fs.existsSync(OUTPUT_PATH)) {
       fs.copyFileSync(OUTPUT_PATH, OUTPUT_PATH + ".bak");

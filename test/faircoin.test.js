@@ -193,7 +193,7 @@ describe("FairCoin", function () {
     await expect(fair.connect(seller).sellFair(sellAmount, 0, deadline)).to.be.revertedWith("BALANCE");
   });
 
-  it("prevents reentrancy on claim", async function () {
+  it("prevents double-claim", async function () {
     const { fair, signers, proofs } = await deployFixture();
     const user = signers[0];
     const proof = proofs[user.address.toLowerCase()];
