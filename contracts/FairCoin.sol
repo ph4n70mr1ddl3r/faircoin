@@ -32,6 +32,8 @@ contract FairCoin is Pausable {
     uint256 public constant POOL_DIVISOR = 20;
     uint256 public constant FEE_DENOMINATOR = 1000;
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18;
+    uint256 public constant POOL_CUT = 5 * 1e18;
+    uint256 public constant USER_CUT = 95 * 1e18;
 
     mapping(address => bool) public claimed;
 
@@ -120,6 +122,7 @@ contract FairCoin is Pausable {
     }
 
     function _mint(address to, uint256 amount) internal {
+        require(to != address(0), "ZERO_ADDRESS");
         require(totalSupply + amount <= MAX_SUPPLY, "MAX_SUPPLY");
         unchecked {
             totalSupply += amount;
@@ -136,17 +139,14 @@ contract FairCoin is Pausable {
         require(!claimed[msg.sender], "ALREADY_CLAIMED");
         require(_verify(proof, msg.sender), "INVALID_PROOF");
 
-        uint256 poolCut = CLAIM_AMOUNT / POOL_DIVISOR;
-        uint256 userCut = CLAIM_AMOUNT - poolCut;
-
-        require(totalSupply + userCut + poolCut <= MAX_SUPPLY, "MAX_SUPPLY");
+        require(totalSupply + USER_CUT + POOL_CUT <= MAX_SUPPLY, "MAX_SUPPLY");
 
         claimed[msg.sender] = true;
-        _mint(msg.sender, userCut);
-        _mint(address(this), poolCut);
+        _mint(msg.sender, USER_CUT);
+        _mint(address(this), POOL_CUT);
 
         _sync();
-        emit Claimed(msg.sender, userCut, poolCut);
+        emit Claimed(msg.sender, USER_CUT, POOL_CUT);
     }
 
     function _verify(bytes32[] calldata proof, address account) internal view returns (bool) {

@@ -82,6 +82,9 @@ function main() {
     };
 
     fs.mkdirSync(path.join(__dirname, "..", "public"), { recursive: true });
+    if (fs.existsSync(OUTPUT_PATH)) {
+      fs.copyFileSync(OUTPUT_PATH, OUTPUT_PATH + ".bak");
+    }
     fs.writeFileSync(OUTPUT_PATH, JSON.stringify(payload, null, 2));
 
     console.log(`Wrote merkle root ${payload.merkleRoot} with ${entries.length} leaves to public/airdrop.json`);

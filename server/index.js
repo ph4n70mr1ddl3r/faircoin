@@ -1,5 +1,6 @@
 const path = require("path");
 const express = require("express");
+const crypto = require("crypto");
 const Database = require("better-sqlite3");
 const fs = require("fs");
 const helmet = require("helmet");
@@ -174,7 +175,7 @@ function createServer() {
   });
   
   app.use((req, res, next) => {
-    const nonce = require('crypto').randomBytes(16).toString('base64');
+    const nonce = crypto.randomBytes(16).toString('base64');
     res.locals.nonce = nonce;
     res.setHeader('Content-Security-Policy', 
       `default-src 'self'; ` +

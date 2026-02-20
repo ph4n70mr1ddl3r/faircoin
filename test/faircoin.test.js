@@ -359,7 +359,7 @@ describe("FairCoin", function () {
   });
 
   it("enforces minimum fee of 1 wei for small sells", async function () {
-    const { fair, signers, proofs } = await deployFixture();
+    const { fair, deployer, signers, proofs } = await deployFixture();
     const lp = signers[0];
     const seller = signers[1];
 
@@ -370,7 +370,10 @@ describe("FairCoin", function () {
     const sellAmount = 500n;
     const deadline = Math.floor(Date.now() / 1000) + 3600;
 
-    await expect(fair.connect(seller).sellFair(sellAmount, 0, deadline))
-      .to.emit(fair, "Sell");
+    const tx = await fair.connect(seller).sellFair(sellAmount, 0, deadline);
+    const receipt = await tx.wait();
+    const sellEvent = receipt.logs.find(l => fair.interface.parseLog(l)?.name === "Sell");
+    const parsedEvent = fair.interface.parseLog(sellEvent);
+    expect(parsedEvent.args[2]).to.equal(1n);
   });
 });
