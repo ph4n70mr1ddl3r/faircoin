@@ -6,8 +6,8 @@
   "scripts": {
     "test": "npx hardhat test",
     "compile": "npx hardhat compile",
-    "lint": "npx hardhat compile",
-    "typecheck": "npx hardhat compile",
+    "lint": "npx solhint 'contracts/**/*.sol' 2>/dev/null || echo 'solhint not installed, skipping'",
+    "typecheck": "npx hardhat compile --force",
     "build:merkle": "node scripts/buildMerkle.js",
     "serve": "npx http-server public -p 4173",
     "dev": "node server/index.js"

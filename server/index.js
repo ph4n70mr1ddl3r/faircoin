@@ -48,6 +48,18 @@ function validateAddress(address) {
   }
 }
 
+function isValidClaimAmount(amount) {
+  if (!amount) return false;
+  const str = String(amount);
+  if (!/^\d+$/.test(str)) return false;
+  try {
+    const val = BigInt(str);
+    return val > 0n;
+  } catch {
+    return false;
+  }
+}
+
 function validateClaimsData(claims) {
   if (!Array.isArray(claims)) {
     throw new Error("Claims must be an array");
@@ -109,9 +121,13 @@ function initDb() {
       }
       const entries = raw.claims || [];
       validateClaimsData(entries);
+      const claimAmount = raw.claimAmount || "100";
+      if (!isValidClaimAmount(claimAmount)) {
+        throw new Error("Invalid airdrop.json: claimAmount must be a positive integer string");
+      }
       
       const insertRoot = db.prepare("INSERT INTO merkle_root (id, root, claim_amount) VALUES (1, ?, ?)");
-      insertRoot.run(raw.merkleRoot.toLowerCase(), raw.claimAmount || "100");
+      insertRoot.run(raw.merkleRoot.toLowerCase(), claimAmount);
 
       const insertClaim = db.prepare("INSERT INTO claims (address, proof) VALUES (?, ?)");
       const tx = db.transaction(() => {
@@ -194,7 +210,8 @@ function createServer() {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (allowedOrigins.length === 0) {
-        return callback(null, true);
+        logger.warn(`CORS blocked for origin (no allowed origins configured): ${origin}`);
+        return callback(new Error('CORS not configured - set ALLOWED_ORIGINS'));
       }
       const isAllowed = allowedOrigins.some(allowed => {
         try {

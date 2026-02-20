@@ -115,18 +115,12 @@
         const tdAddr = document.createElement("td");
         tdAddr.textContent = claim.address;
         const tdProof = document.createElement("td");
-        const proofMuted = document.createElement("span");
-        proofMuted.className = "muted";
-        proofMuted.textContent = "hidden";
-        tdProof.appendChild(proofMuted);
-        const tdProofCode = document.createElement("td");
         const codeEl = document.createElement("code");
         codeEl.className = "inline";
         codeEl.textContent = shorten((claim.proof || []).join(",") || "n/a");
-        tdProofCode.appendChild(codeEl);
+        tdProof.appendChild(codeEl);
         tr.appendChild(tdAddr);
         tr.appendChild(tdProof);
-        tr.appendChild(tdProofCode);
         tbody.appendChild(tr);
       });
     }
@@ -158,7 +152,6 @@
     const claim = state.claims[idx];
     if (!claim) return;
     $("address").value = claim.address;
-    if ($("privateKey")) $("privateKey").value = "";
     $("proof").value = JSON.stringify(claim.proof || [], null, 2);
     $("status").textContent = "Proof pulled from the generated Merkle tree.";
     $("status").className = "success";

@@ -29,7 +29,6 @@ contract FairCoin is Pausable {
     address public immutable founder;
     bytes32 public immutable merkleRoot;
     uint256 public constant CLAIM_AMOUNT = 100 * 1e18;
-    uint256 public constant POOL_DIVISOR = 20;
     uint256 public constant FEE_DENOMINATOR = 1000;
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18;
     uint256 public constant POOL_CUT = 5 * 1e18;
@@ -105,12 +104,15 @@ contract FairCoin is Pausable {
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         uint256 allowed = _allowances[from][msg.sender];
         require(allowed >= amount, "ALLOWANCE");
-        _allowances[from][msg.sender] = allowed - amount;
+        if (allowed != type(uint256).max) {
+            _allowances[from][msg.sender] = allowed - amount;
+        }
         _transfer(from, to, amount);
         return true;
     }
 
     function _transfer(address from, address to, uint256 amount) internal {
+        require(from != address(0), "ZERO_FROM");
         require(to != address(0), "ZERO_TO");
         uint256 bal = _balances[from];
         require(bal >= amount, "BALANCE");
@@ -227,9 +229,7 @@ contract FairCoin is Pausable {
     }
 
     receive() external payable nonReentrant {
-        if (msg.value > 0) {
-            emit EthReceived(msg.sender, msg.value);
-        }
         _sync();
+        emit EthReceived(msg.sender, msg.value);
     }
 }
