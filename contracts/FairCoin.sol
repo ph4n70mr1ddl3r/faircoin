@@ -206,7 +206,7 @@ contract FairCoin is Pausable {
         uint256 ethOut = _getAmountOut(amountInAfterFee, reserveFair, reserveEth);
         require(ethOut > 0, "NO_LIQUIDITY");
         require(ethOut >= minEthOut, "SLIPPAGE_EXCEEDED");
-        require(ethOut <= address(this).balance, "INSUFFICIENT_ETH");
+        require(ethOut <= reserveEth, "INSUFFICIENT_ETH");
 
         (bool ok, ) = msg.sender.call{value: ethOut}("");
         require(ok, "ETH_SEND_FAIL");

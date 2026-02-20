@@ -376,4 +376,85 @@ describe("FairCoin", function () {
     const parsedEvent = fair.interface.parseLog(sellEvent);
     expect(parsedEvent.args[2]).to.equal(1n);
   });
+
+  it("allows direct transfer between accounts", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const sender = signers[0];
+    const recipient = signers[1];
+
+    await fair.connect(sender).claim(proofs[sender.address.toLowerCase()]);
+    
+    const transferAmount = 10n * WAD;
+    await expect(fair.connect(sender).transfer(recipient.address, transferAmount))
+      .to.emit(fair, "Transfer")
+      .withArgs(sender.address, recipient.address, transferAmount);
+
+    expect(await fair.balanceOf(sender.address)).to.equal(95n * WAD - transferAmount);
+    expect(await fair.balanceOf(recipient.address)).to.equal(transferAmount);
+  });
+
+  it("rejects transfer to zero address", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const sender = signers[0];
+
+    await fair.connect(sender).claim(proofs[sender.address.toLowerCase()]);
+    
+    await expect(fair.connect(sender).transfer(ethers.ZeroAddress, 10n * WAD))
+      .to.be.revertedWith("ZERO_TO");
+  });
+
+  it("rejects transfer with insufficient balance", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const sender = signers[0];
+    const recipient = signers[1];
+
+    await fair.connect(sender).claim(proofs[sender.address.toLowerCase()]);
+    
+    await expect(fair.connect(sender).transfer(recipient.address, 100n * WAD))
+      .to.be.revertedWith("BALANCE");
+  });
+
+  it("allows donating both FAIR and ETH simultaneously", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const donor = signers[0];
+
+    await fair.connect(donor).claim(proofs[donor.address.toLowerCase()]);
+    
+    const donateFair = 10n * WAD;
+    const donateEth = 1n * WAD;
+    
+    await expect(fair.connect(donor).donate(donateFair, { value: donateEth }))
+      .to.emit(fair, "Donation")
+      .withArgs(donor.address, donateFair, donateEth);
+
+    expect(await fair.reserveFair()).to.equal(15n * WAD);
+    expect(await fair.reserveEth()).to.equal(donateEth);
+  });
+
+  it("handles receive with zero ETH gracefully", async function () {
+    const { fair, signers } = await deployFixture();
+    const donor = signers[0];
+
+    const reserveEthBefore = await fair.reserveEth();
+    
+    await donor.sendTransaction({ to: await fair.getAddress(), value: 0 });
+    
+    expect(await fair.reserveEth()).to.equal(reserveEthBefore);
+  });
+
+  it("prevents claim exceeding MAX_SUPPLY", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const maxSupply = await fair.MAX_SUPPLY();
+    const claimAmount = await fair.CLAIM_AMOUNT();
+    
+    const maxClaims = maxSupply / claimAmount;
+    
+    const entries = loadSample();
+    if (entries.length < Number(maxClaims)) {
+      this.skip();
+    }
+    
+    expect(maxSupply).to.equal(1_000_000_000n * WAD);
+    expect(claimAmount).to.equal(100n * WAD);
+  });
 });

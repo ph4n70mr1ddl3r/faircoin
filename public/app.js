@@ -338,6 +338,13 @@
     const net = await state.provider.getNetwork();
     state.chainId = net.chainId?.toString?.() || "";
     setWalletStatus();
+    $("address").value = state.walletAddress;
+    try {
+      const eligibility = await fetchEligibility(state.walletAddress);
+      applyEligibility(eligibility);
+    } catch (err) {
+      console.error("Eligibility lookup failed:", err.message);
+    }
   }
 
   async function onChainChanged() {

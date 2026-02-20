@@ -262,7 +262,7 @@ function createServer() {
       }
       
       const normalizedAddress = address.toLowerCase();
-      logger.info(`Eligibility check for address: ${normalizedAddress}`);
+      logger.info(`Eligibility check for address: ${normalizedAddress.slice(0, 6)}...${normalizedAddress.slice(-4)}`);
 
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
       if (!rootRow) {
