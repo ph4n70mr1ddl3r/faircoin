@@ -15,6 +15,7 @@ dist/
 server/airdrop.db
 *.db
 *.sqlite
+public/airdrop.json
 
 # Environment
 .env

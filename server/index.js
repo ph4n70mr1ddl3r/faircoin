@@ -189,7 +189,6 @@ function createServer() {
   });
   process.on('unhandledRejection', (reason, promise) => {
     logger.error(`Unhandled rejection at ${promise}: ${reason}`);
-    gracefulShutdown('unhandledRejection');
   });
   
   app.use((req, res, next) => {
@@ -211,10 +210,12 @@ function createServer() {
   const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : [];
   app.use(cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
       if (allowedOrigins.length === 0) {
-        logger.warn(`CORS blocked for origin (no allowed origins configured): ${origin}`);
+        logger.warn(`CORS blocked for origin (no allowed origins configured): ${origin || 'no-origin'}`);
         return callback(new Error('CORS not configured - set ALLOWED_ORIGINS'));
+      }
+      if (!origin) {
+        return callback(new Error('Origin header required'));
       }
       const isAllowed = allowedOrigins.some(allowed => {
         try {

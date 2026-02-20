@@ -10,5 +10,12 @@ module.exports = {
         runs: 200
       }
     }
+  },
+  networks: {
+    hardhat: {
+      chainId: 31337
+    }
+    // Add production networks via environment variables only:
+    // mainnet: { url: process.env.MAINNET_RPC, accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [] }
   }
 };

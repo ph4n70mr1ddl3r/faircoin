@@ -29,10 +29,11 @@ contract FairCoin is Pausable {
     address public immutable founder;
     bytes32 public immutable merkleRoot;
     uint256 public constant CLAIM_AMOUNT = 100 * 1e18;
-    uint256 public constant FEE_DENOMINATOR = 1000;
+    uint256 public constant FEE_DENOMINATOR = 1000; // 0.1% fee (10 basis points)
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18;
     uint256 public constant POOL_CUT = 5 * 1e18;
     uint256 public constant USER_CUT = 95 * 1e18;
+    uint256 public constant MIN_SELL_AMOUNT = 1000; // Minimum tokens to sell to avoid fee edge case
 
     mapping(address => bool) public claimed;
 
@@ -102,6 +103,7 @@ contract FairCoin is Pausable {
     }
 
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(to != address(0), "ZERO_TO");
         uint256 allowed = _allowances[from][msg.sender];
         require(allowed >= amount, "ALLOWANCE");
         if (allowed != type(uint256).max) {
@@ -167,7 +169,7 @@ contract FairCoin is Pausable {
                               AMM LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function donate(uint256 fairAmount) external payable nonReentrant {
+    function donate(uint256 fairAmount) external payable nonReentrant whenNotPaused {
         require(fairAmount > 0 || msg.value > 0, "DONATE_ZERO");
         
         if (fairAmount > 0) {
@@ -191,14 +193,11 @@ contract FairCoin is Pausable {
 
     function sellFair(uint256 fairAmount, uint256 minEthOut, uint256 deadline) external nonReentrant whenNotPaused {
         require(block.timestamp <= deadline, "EXPIRED");
-        require(fairAmount > 0, "ZERO_IN");
+        require(fairAmount >= MIN_SELL_AMOUNT, "AMOUNT_TOO_SMALL");
 
         _transfer(msg.sender, address(this), fairAmount);
 
         uint256 fee = fairAmount / FEE_DENOMINATOR;
-        if (fee == 0 && fairAmount > 0) {
-            fee = 1;
-        }
         uint256 amountInAfterFee = fairAmount - fee;
 
         _transfer(address(this), founder, fee);

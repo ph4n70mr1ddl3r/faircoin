@@ -181,7 +181,7 @@ describe("FairCoin", function () {
   it("rejects sell with zero amount", async function () {
     const { fair, signers } = await deployFixture();
     const deadline = Math.floor(Date.now() / 1000) + 3600;
-    await expect(fair.connect(signers[0]).sellFair(0, 0, deadline)).to.be.revertedWith("ZERO_IN");
+    await expect(fair.connect(signers[0]).sellFair(0, 0, deadline)).to.be.revertedWith("AMOUNT_TOO_SMALL");
   });
 
   it("rejects sell without sufficient balance", async function () {
@@ -357,8 +357,8 @@ describe("FairCoin", function () {
       .to.be.reverted;
   });
 
-  it("enforces minimum fee of 1 wei for small sells", async function () {
-    const { fair, deployer, signers, proofs } = await deployFixture();
+  it("enforces minimum sell amount", async function () {
+    const { fair, signers, proofs } = await deployFixture();
     const lp = signers[0];
     const seller = signers[1];
 
@@ -366,14 +366,14 @@ describe("FairCoin", function () {
     await fair.connect(lp).donate(50n * WAD, { value: 2n * WAD });
     await fair.connect(seller).claim(proofs[seller.address.toLowerCase()]);
 
-    const sellAmount = 500n;
     const deadline = Math.floor(Date.now() / 1000) + 3600;
 
-    const tx = await fair.connect(seller).sellFair(sellAmount, 0, deadline);
-    const receipt = await tx.wait();
-    const sellEvent = receipt.logs.find(l => fair.interface.parseLog(l)?.name === "Sell");
-    const parsedEvent = fair.interface.parseLog(sellEvent);
-    expect(parsedEvent.args[2]).to.equal(1n);
+    // Should reject sells below MIN_SELL_AMOUNT (1000 wei)
+    await expect(fair.connect(seller).sellFair(999, 0, deadline)).to.be.revertedWith("AMOUNT_TOO_SMALL");
+
+    // Should accept sells at MIN_SELL_AMOUNT
+    const sellAmount = 1000n;
+    await expect(fair.connect(seller).sellFair(sellAmount, 0, deadline)).to.not.be.reverted;
   });
 
   it("allows direct transfer between accounts", async function () {
