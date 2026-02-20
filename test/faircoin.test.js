@@ -79,7 +79,6 @@ describe("FairCoin", function () {
     const donor = signers[0];
     const buyer = signers[1];
 
-    // Donor claims and seeds liquidity with FAIR + ETH
     await fair.connect(donor).claim(proofs[donor.address.toLowerCase()]);
     const donateFair = 50n * WAD;
     const donateEth = 1n * WAD;
@@ -90,8 +89,9 @@ describe("FairCoin", function () {
 
     const ethIn = 1n * WAD;
     const expectedFairOut = (reserveFairBefore * ethIn) / (reserveEthBefore + ethIn);
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
 
-    await expect(fair.connect(buyer).buyFair(expectedFairOut, { value: ethIn }))
+    await expect(fair.connect(buyer).buyFair(expectedFairOut, deadline, { value: ethIn }))
       .to.emit(fair, "Buy")
       .withArgs(buyer.address, ethIn, expectedFairOut);
 
@@ -110,23 +110,22 @@ describe("FairCoin", function () {
     const liquidityProvider = signers[0];
     const seller = signers[1];
 
-    // LP seeds pool
     await fair.connect(liquidityProvider).claim(proofs[liquidityProvider.address.toLowerCase()]);
     await fair.connect(liquidityProvider).donate(50n * WAD, { value: 2n * WAD });
 
-    // Seller claims to get FAIR to sell
     await fair.connect(seller).claim(proofs[seller.address.toLowerCase()]);
 
     const sellAmount = 10n * WAD;
-    const fee = sellAmount / 1000n; // 0.1%
+    const fee = sellAmount / 1000n;
     const amountAfterFee = sellAmount - fee;
 
     const reserveFairBefore = await fair.reserveFair();
     const reserveEthBefore = await fair.reserveEth();
 
     const expectedEthOut = (reserveEthBefore * amountAfterFee) / (reserveFairBefore + amountAfterFee);
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
 
-    const txPromise = fair.connect(seller).sellFair(sellAmount, expectedEthOut);
+    const txPromise = fair.connect(seller).sellFair(sellAmount, expectedEthOut, deadline);
     await expect(txPromise)
       .to.emit(fair, "Sell")
       .withArgs(seller.address, sellAmount, fee, expectedEthOut);
@@ -169,25 +168,29 @@ describe("FairCoin", function () {
 
   it("rejects buy with zero ETH", async function () {
     const { fair, signers } = await deployFixture();
-    await expect(fair.connect(signers[0]).buyFair(0, { value: 0 })).to.be.revertedWith("ZERO_IN");
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    await expect(fair.connect(signers[0]).buyFair(0, deadline, { value: 0 })).to.be.revertedWith("ZERO_IN");
   });
 
   it("rejects buy with no liquidity", async function () {
     const { fair, signers } = await deployFixture();
     const ethIn = 1n * WAD;
-    await expect(fair.connect(signers[0]).buyFair(0, { value: ethIn })).to.be.revertedWith("NO_LIQUIDITY");
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    await expect(fair.connect(signers[0]).buyFair(0, deadline, { value: ethIn })).to.be.revertedWith("NO_LIQUIDITY");
   });
 
   it("rejects sell with zero amount", async function () {
     const { fair, signers } = await deployFixture();
-    await expect(fair.connect(signers[0]).sellFair(0, 0)).to.be.revertedWith("ZERO_IN");
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    await expect(fair.connect(signers[0]).sellFair(0, 0, deadline)).to.be.revertedWith("ZERO_IN");
   });
 
   it("rejects sell without sufficient balance", async function () {
     const { fair, signers } = await deployFixture();
     const seller = signers[0];
     const sellAmount = 100n * WAD;
-    await expect(fair.connect(seller).sellFair(sellAmount, 0)).to.be.revertedWith("BALANCE");
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    await expect(fair.connect(seller).sellFair(sellAmount, 0, deadline)).to.be.revertedWith("BALANCE");
   });
 
   it("prevents reentrancy on claim", async function () {
@@ -245,5 +248,129 @@ describe("FairCoin", function () {
 
     await fair.connect(user).claim(proof);
     expect(await fair.totalSupply()).to.equal(100n * WAD);
+  });
+
+  it("rejects buy with expired deadline", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const donor = signers[0];
+    const buyer = signers[1];
+
+    await fair.connect(donor).claim(proofs[donor.address.toLowerCase()]);
+    await fair.connect(donor).donate(50n * WAD, { value: 1n * WAD });
+
+    const expiredDeadline = Math.floor(Date.now() / 1000) - 1;
+    await expect(fair.connect(buyer).buyFair(0, expiredDeadline, { value: 1n * WAD }))
+      .to.be.revertedWith("EXPIRED");
+  });
+
+  it("rejects sell with expired deadline", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const lp = signers[0];
+    const seller = signers[1];
+
+    await fair.connect(lp).claim(proofs[lp.address.toLowerCase()]);
+    await fair.connect(lp).donate(50n * WAD, { value: 1n * WAD });
+    await fair.connect(seller).claim(proofs[seller.address.toLowerCase()]);
+
+    const expiredDeadline = Math.floor(Date.now() / 1000) - 1;
+    await expect(fair.connect(seller).sellFair(10n * WAD, 0, expiredDeadline))
+      .to.be.revertedWith("EXPIRED");
+  });
+
+  it("rejects buy with slippage exceeded", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const donor = signers[0];
+    const buyer = signers[1];
+
+    await fair.connect(donor).claim(proofs[donor.address.toLowerCase()]);
+    await fair.connect(donor).donate(50n * WAD, { value: 1n * WAD });
+
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    const excessiveMinOut = 1000n * WAD;
+    await expect(fair.connect(buyer).buyFair(excessiveMinOut, deadline, { value: 1n * WAD }))
+      .to.be.revertedWith("SLIPPAGE_EXCEEDED");
+  });
+
+  it("rejects sell with slippage exceeded", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const lp = signers[0];
+    const seller = signers[1];
+
+    await fair.connect(lp).claim(proofs[lp.address.toLowerCase()]);
+    await fair.connect(lp).donate(50n * WAD, { value: 2n * WAD });
+    await fair.connect(seller).claim(proofs[seller.address.toLowerCase()]);
+
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    const excessiveMinEth = 100n * WAD;
+    await expect(fair.connect(seller).sellFair(10n * WAD, excessiveMinEth, deadline))
+      .to.be.revertedWith("SLIPPAGE_EXCEEDED");
+  });
+
+  it("rejects approve to zero address", async function () {
+    const { fair, signers } = await deployFixture();
+    await expect(fair.connect(signers[0]).approve(ethers.ZeroAddress, 100n * WAD))
+      .to.be.revertedWith("ZERO_SPENDER");
+  });
+
+  it("rejects transferFrom with insufficient allowance", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const owner = signers[0];
+    const spender = signers[1];
+    const recipient = signers[2];
+
+    await fair.connect(owner).claim(proofs[owner.address.toLowerCase()]);
+    
+    await expect(fair.connect(spender).transferFrom(owner.address, recipient.address, 10n * WAD))
+      .to.be.revertedWith("ALLOWANCE");
+  });
+
+  it("allows transferFrom with sufficient allowance", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const owner = signers[0];
+    const spender = signers[1];
+    const recipient = signers[2];
+
+    await fair.connect(owner).claim(proofs[owner.address.toLowerCase()]);
+    await fair.connect(owner).approve(spender.address, 10n * WAD);
+
+    await expect(fair.connect(spender).transferFrom(owner.address, recipient.address, 10n * WAD))
+      .to.emit(fair, "Transfer")
+      .withArgs(owner.address, recipient.address, 10n * WAD);
+
+    expect(await fair.balanceOf(recipient.address)).to.equal(10n * WAD);
+  });
+
+  it("rejects buy and sell when paused", async function () {
+    const { fair, deployer, signers, proofs } = await deployFixture();
+    const lp = signers[0];
+    const user = signers[1];
+
+    await fair.connect(lp).claim(proofs[lp.address.toLowerCase()]);
+    await fair.connect(lp).donate(50n * WAD, { value: 1n * WAD });
+    await fair.connect(user).claim(proofs[user.address.toLowerCase()]);
+
+    await fair.connect(deployer).pause();
+
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    await expect(fair.connect(user).buyFair(0, deadline, { value: 1n * WAD }))
+      .to.be.reverted;
+    await expect(fair.connect(user).sellFair(10n * WAD, 0, deadline))
+      .to.be.reverted;
+  });
+
+  it("enforces minimum fee of 1 wei for small sells", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const lp = signers[0];
+    const seller = signers[1];
+
+    await fair.connect(lp).claim(proofs[lp.address.toLowerCase()]);
+    await fair.connect(lp).donate(50n * WAD, { value: 2n * WAD });
+    await fair.connect(seller).claim(proofs[seller.address.toLowerCase()]);
+
+    const sellAmount = 500n;
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+
+    await expect(fair.connect(seller).sellFair(sellAmount, 0, deadline))
+      .to.emit(fair, "Sell");
   });
 });

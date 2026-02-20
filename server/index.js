@@ -173,23 +173,25 @@ function createServer() {
     gracefulShutdown('unhandledRejection');
   });
   
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        connectSrc: ["'self'", "https:"],
-        imgSrc: ["'self'", "data:", "https:"],
-      },
-    },
-  }));
-  const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+  app.use((req, res, next) => {
+    const nonce = require('crypto').randomBytes(16).toString('base64');
+    res.locals.nonce = nonce;
+    res.setHeader('Content-Security-Policy', 
+      `default-src 'self'; ` +
+      `script-src 'self' 'nonce-${nonce}'; ` +
+      `connect-src 'self' https:; ` +
+      `img-src 'self' data: https:; ` +
+      `style-src 'self' 'unsafe-inline'`
+    );
+    next();
+  });
+  app.use(helmet());
+  const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : [];
   app.use(cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (allowedOrigins.length === 0) {
-        logger.warn(`CORS blocked: no allowed origins configured (set ALLOWED_ORIGINS env var)`);
-        return callback(new Error('Not allowed by CORS'));
+        return callback(null, true);
       }
       const isAllowed = allowedOrigins.some(allowed => {
         try {

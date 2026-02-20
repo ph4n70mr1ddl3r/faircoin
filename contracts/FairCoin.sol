@@ -89,6 +89,7 @@ contract FairCoin is Pausable {
     }
 
     function approve(address spender, uint256 amount) external returns (bool) {
+        require(spender != address(0), "ZERO_SPENDER");
         _allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
@@ -176,7 +177,8 @@ contract FairCoin is Pausable {
         emit Donation(msg.sender, fairAmount, msg.value);
     }
 
-    function buyFair(uint256 minAmountOut) external payable nonReentrant whenNotPaused {
+    function buyFair(uint256 minAmountOut, uint256 deadline) external payable nonReentrant whenNotPaused {
+        require(block.timestamp <= deadline, "EXPIRED");
         require(msg.value > 0, "ZERO_IN");
         uint256 fairOut = _getAmountOut(msg.value, reserveEth, reserveFair);
         require(fairOut > 0, "NO_LIQUIDITY");
@@ -187,7 +189,8 @@ contract FairCoin is Pausable {
         emit Buy(msg.sender, msg.value, fairOut);
     }
 
-    function sellFair(uint256 fairAmount, uint256 minEthOut) external nonReentrant whenNotPaused {
+    function sellFair(uint256 fairAmount, uint256 minEthOut, uint256 deadline) external nonReentrant whenNotPaused {
+        require(block.timestamp <= deadline, "EXPIRED");
         require(fairAmount > 0, "ZERO_IN");
 
         _transfer(msg.sender, address(this), fairAmount);
