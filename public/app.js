@@ -112,11 +112,21 @@
       tbody.innerHTML = "";
       state.claims.forEach((claim, idx) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${claim.address}</td>
-          <td><span class="muted">hidden</span></td>
-          <td><code class="inline">${shorten((claim.proof || []).join(",") || "n/a")}</code></td>
-        `;
+        const tdAddr = document.createElement("td");
+        tdAddr.textContent = claim.address;
+        const tdProof = document.createElement("td");
+        const proofMuted = document.createElement("span");
+        proofMuted.className = "muted";
+        proofMuted.textContent = "hidden";
+        tdProof.appendChild(proofMuted);
+        const tdProofCode = document.createElement("td");
+        const codeEl = document.createElement("code");
+        codeEl.className = "inline";
+        codeEl.textContent = shorten((claim.proof || []).join(",") || "n/a");
+        tdProofCode.appendChild(codeEl);
+        tr.appendChild(tdAddr);
+        tr.appendChild(tdProof);
+        tr.appendChild(tdProofCode);
         tbody.appendChild(tr);
       });
     }

@@ -209,4 +209,41 @@ describe("FairCoin", function () {
     
     expect(await fair.reserveEth()).to.equal(ethAmount);
   });
+
+  it("allows founder to pause and unpause", async function () {
+    const { fair, deployer, signers, proofs } = await deployFixture();
+    const user = signers[0];
+    const proof = proofs[user.address.toLowerCase()];
+
+    await expect(fair.connect(deployer).pause())
+      .to.emit(fair, "Paused");
+    
+    expect(await fair.paused()).to.equal(true);
+
+    await expect(fair.connect(user).claim(proof)).to.be.reverted;
+
+    await expect(fair.connect(deployer).unpause())
+      .to.emit(fair, "Unpaused");
+    
+    expect(await fair.paused()).to.equal(false);
+
+    await expect(fair.connect(user).claim(proof))
+      .to.emit(fair, "Claimed");
+  });
+
+  it("rejects pause from non-founder", async function () {
+    const { fair, signers } = await deployFixture();
+    await expect(fair.connect(signers[0]).pause()).to.be.revertedWith("NOT_FOUNDER");
+  });
+
+  it("enforces MAX_SUPPLY limit", async function () {
+    const { fair, signers, proofs } = await deployFixture();
+    const user = signers[0];
+    const proof = proofs[user.address.toLowerCase()];
+
+    expect(await fair.MAX_SUPPLY()).to.equal(1_000_000_000n * WAD);
+
+    await fair.connect(user).claim(proof);
+    expect(await fair.totalSupply()).to.equal(100n * WAD);
+  });
 });

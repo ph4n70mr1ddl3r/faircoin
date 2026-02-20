@@ -138,8 +138,10 @@ function createServer() {
 
   const gracefulShutdown = (signal) => {
     logger.info(`${signal} received: closing server gracefully...`);
+    let shutdownTimer = null;
     if (server) {
       server.close(() => {
+        if (shutdownTimer) clearTimeout(shutdownTimer);
         logger.info('Server closed');
         db.close();
         process.exit(0);
@@ -149,7 +151,7 @@ function createServer() {
       process.exit(0);
     }
 
-    setTimeout(() => {
+    shutdownTimer = setTimeout(() => {
       logger.error('Forced shutdown after timeout');
       try {
         db.close();
