@@ -11,6 +11,11 @@
   };
 
   const $ = (id) => document.getElementById(id);
+  const $safe = (id, fn) => {
+    const el = $(id);
+    if (el) fn(el);
+    return el;
+  };
 
   async function fetchWithTimeout(url, options = {}, timeout = 10000) {
     const controller = new AbortController();

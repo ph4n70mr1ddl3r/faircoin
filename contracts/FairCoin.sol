@@ -232,4 +232,8 @@ contract FairCoin is Pausable {
         _sync();
         emit EthReceived(msg.sender, msg.value);
     }
+
+    fallback() external payable {
+        revert("UNEXPECTED_CALL");
+    }
 }

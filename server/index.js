@@ -194,7 +194,10 @@ function createServer() {
   
   app.use((req, res, next) => {
     const nonce = crypto.randomBytes(16).toString('base64');
+    const requestId = crypto.randomBytes(8).toString('hex');
     res.locals.nonce = nonce;
+    res.locals.requestId = requestId;
+    res.setHeader('X-Request-Id', requestId);
     res.setHeader('Content-Security-Policy', 
       `default-src 'self'; ` +
       `script-src 'self' 'nonce-${nonce}'; ` +
@@ -267,21 +270,22 @@ function createServer() {
   });
 
   app.get("/api/eligibility", (req, res) => {
+    const requestId = res.locals.requestId || 'unknown';
     try {
       const address = String(req.query.address || "").trim();
       
       if (!address) {
-        logger.warn("Eligibility check attempted with empty address");
+        logger.info(`[${requestId}] Eligibility check attempted with empty address`);
         return res.status(400).json({ error: "Address parameter is required" });
       }
       
       if (!validateAddress(address)) {
-        logger.warn(`Invalid address format: ${address}`);
+        logger.info(`[${requestId}] Invalid address format: ${address.slice(0, 10)}...`);
         return res.status(400).json({ error: "Invalid Ethereum address format" });
       }
       
       const normalizedAddress = address.toLowerCase();
-      logger.info(`Eligibility check for address: ${normalizedAddress.slice(0, 6)}...${normalizedAddress.slice(-4)}`);
+      logger.info(`[${requestId}] Eligibility check for: ${normalizedAddress.slice(0, 6)}...${normalizedAddress.slice(-4)}`);
 
       const rootRow = db.prepare("SELECT root, claim_amount FROM merkle_root WHERE id = 1").get();
       if (!rootRow) {
@@ -319,14 +323,15 @@ function createServer() {
         proof,
       });
     } catch (err) {
-      logger.error(`Eligibility check error: ${err.message}`);
+      logger.error(`[${res.locals.requestId || 'unknown'}] Eligibility check error: ${err.message}`);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
   app.use((err, req, res, next) => {
-    logger.error(`Unhandled error: ${err.message}`);
-    res.status(500).json({ error: "Internal server error" });
+    const requestId = res.locals.requestId || 'unknown';
+    logger.error(`[${requestId}] Unhandled error: ${err.message}`);
+    res.status(500).json({ error: "Internal server error", requestId });
   });
 
   server = app.listen(PORT, () => {

@@ -446,14 +446,29 @@ describe("FairCoin", function () {
     const maxSupply = await fair.MAX_SUPPLY();
     const claimAmount = await fair.CLAIM_AMOUNT();
     
-    const maxClaims = maxSupply / claimAmount;
-    
-    const entries = loadSample();
-    if (entries.length < Number(maxClaims)) {
-      this.skip();
-    }
-    
     expect(maxSupply).to.equal(1_000_000_000n * WAD);
     expect(claimAmount).to.equal(100n * WAD);
+    
+    const maxClaims = Number(maxSupply / claimAmount);
+    const entries = loadSample();
+    
+    if (entries.length >= maxClaims) {
+      this.skip();
+      return;
+    }
+    
+    const claimsPossible = entries.length;
+    const expectedSupply = BigInt(claimsPossible) * claimAmount;
+    expect(expectedSupply).to.be.lessThanOrEqual(maxSupply);
+  });
+
+  it("rejects calls to non-existent functions", async function () {
+    const { fair, signers } = await deployFixture();
+    await expect(
+      signers[0].sendTransaction({
+        to: await fair.getAddress(),
+        data: "0x12345678"
+      })
+    ).to.be.revertedWith("UNEXPECTED_CALL");
   });
 });
